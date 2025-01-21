@@ -5,7 +5,7 @@
 In connection with considering Stack's support of the
 [Haskell Error Index](https://errors.haskell.org/) initiative, this page seeks
 to take stock of the errors that Stack itself can raise, by reference to the
-`master` branch of the Stack repository. Last updated: 2024-05-17.
+`master` branch of the Stack repository. Last updated: 2024-09-07.
 
 *   `Stack.main`: catches exceptions from action `commandLineHandler`.
 
@@ -385,6 +385,7 @@ to take stock of the errors that Stack itself can raise, by reference to the
         [S-8100] | GHCProfOptionInvalid
         [S-1727] | NotOnlyLocal [PackageName] [Text]
         [S-6362] | CompilerVersionMismatch (Maybe (ActualCompiler, Arch)) (WantedCompiler, Arch) GHCVariant CompilerBuild VersionCheck WantedCompilerSetter Text
+        [S-4660] | ActionNotFilteredBug StyleDoc
         ~~~
 
     -   `Stack.Types.Compiler.CompilerException`
@@ -403,6 +404,7 @@ to take stock of the errors that Stack itself can raise, by reference to the
         [S-2040] | UnableToExtractArchive Text (Path Abs File)
         [S-1641] | BadStackVersionException VersionRange
         [S-8773] | NoSuchDirectory FilePath
+        [S-4335] | NoSuchFile FilePath
         [S-3938] | ParseGHCVariantException String
         [S-8530] | BadStackRoot (Path Abs Dir)
         [S-7613] | Won'tCreateStackRootInDirectoryOwnedByDifferentUser (Path Abs Dir) (Path Abs Dir)
@@ -422,6 +424,8 @@ to take stock of the errors that Stack itself can raise, by reference to the
         [S-5470] | DuplicateLocalPackageNames [(PackageName, [PackageLocation])]
         [S-6854] | BadMsysEnvironment MsysEnvironment Arch
         [S-5006] | NoDefaultMsysEnvironmentBug
+        [S-8398] | ConfigFileNotProjectLevelBug
+        [S-6890] | NoExecutablePath String
         ~~~
 
     -   `Stack.Types.Config.ParseAbsolutePathException`
@@ -539,12 +543,28 @@ to take stock of the errors that Stack itself can raise, by reference to the
 
 *   `Stack.Config.configFromConfigMonoid`:
 
+    Presented as a warning rather than as an error:
+
     ~~~text
-    [S-8432] Stack's 'programs' path contains a space character and has no alternative
+    [S-8432]
+    Stack's 'programs' path is <path>. It contains a space character. This will
+    prevent building with GHC 9.4.1 or later. It also has has no alternative
     short ('8 dot 3') name. This will cause problems with packages that use the
-    GNU project's 'configure' shell script. Use the 'local-programs-path'
-    configuration option to specify an alternative path. The current path is:
-    <path>
+    GNU project's 'configure' shell script.
+
+    To avoid such problems, use the local-programs-path non-project specific
+    configuration option to specify an alternative space-free path.
+    ~~~
+
+    or
+
+    ~~~text
+    [S-8432]
+    Stack's 'programs' path is <path>. It contains a space character. This will
+    prevent building with GHC 9.4.1 or later.
+
+    To avoid such problems, use the local-programs-path non-project specific
+    configuration option to specify an alternative space-free path.
     ~~~
 
 *   `Stack.Coverage.generateHpcReport`: catches exceptions from

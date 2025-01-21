@@ -3,14 +3,14 @@
 
 module StackSetupShim where
 
--- | Stack no longer supports Cabal < 2.2 and, consequently, GHC versions before
+-- Stack no longer supports Cabal < 2.2 and, consequently, GHC versions before
 -- GHC 8.4 or base < 4.11.0.0. Consequently, we do not need to test for the
 -- existence of the MIN_VERSION_Cabal macro (provided from GHC 8.0).
 
 import Data.List ( stripPrefix )
 import Distribution.ReadE ( ReadE (..) )
 import Distribution.Simple.Configure ( getPersistBuildConfig )
--- | Temporary, can be removed if initialBuildSteps restored to Cabal's API.
+-- Temporary, can be removed if initialBuildSteps restored to Cabal's API.
 #if MIN_VERSION_Cabal(3,11,0)
 import Distribution.Simple.Build ( writeBuiltinAutogenFiles )
 #else
@@ -19,7 +19,7 @@ import Distribution.Simple.Build ( initialBuildSteps )
 #if MIN_VERSION_Cabal(3,11,0)
 import Distribution.Simple.Errors ( exceptionMessage )
 #endif
--- | Temporary, can be removed if initialBuildSteps restored to Cabal's API.
+-- Temporary, can be removed if initialBuildSteps restored to Cabal's API.
 #if MIN_VERSION_Cabal(3,11,0)
 import Distribution.Simple.LocalBuildInfo
          ( componentBuildDir, withAllComponentsInBuildOrder )
@@ -41,11 +41,15 @@ import Distribution.Types.GenericPackageDescription
 import "Cabal" Distribution.Types.GenericPackageDescription
          ( GenericPackageDescription (..) )
 #endif
--- | Temporary, can be removed if initialBuildSteps restored to Cabal's API.
+-- Temporary, can be removed if initialBuildSteps restored to Cabal's API.
 #if MIN_VERSION_Cabal(3,11,0)
 import Distribution.Types.ComponentLocalBuildInfo ( ComponentLocalBuildInfo )
 import Distribution.Types.LocalBuildInfo ( LocalBuildInfo )
 import Distribution.Types.PackageDescription ( PackageDescription )
+#if MIN_VERSION_Cabal(3,14,0)
+import Distribution.Utils.Path
+         ( interpretSymbolicPathCWD, makeSymbolicPath, relativeSymbolicPath )
+#endif
 import Distribution.Verbosity ( Verbosity )
 #endif
 import Distribution.Verbosity ( flagToVerbosity )
@@ -85,7 +89,12 @@ stackReplHook arg1 arg2 = do
             "stack-initial-build-steps, expected to parse Cabal verbosity: " <>
             msg1
           Right verbosity -> do
-            eFp <- findPackageDesc ""
+            eFp <-
+#if MIN_VERSION_Cabal(3,14,0)
+              findPackageDesc Nothing
+#else
+              findPackageDesc ""
+#endif
             case eFp of
               Left err -> fail $
                 "Unexpected happened running Setup.hs with " <>
@@ -99,9 +108,23 @@ stackReplHook arg1 arg2 = do
                 msg2 = err
 #endif
               Right fp -> do
-                gpd <- readGenericPackageDescription verbosity fp
+                gpd <-
+                  readGenericPackageDescription
+                    verbosity
+#if MIN_VERSION_Cabal(3,14,0)
+                    Nothing
+                    (relativeSymbolicPath fp)
+#else
+                    fp
+#endif
                 let pd = packageDescription gpd
-                lbi <- getPersistBuildConfig rawBuildDir
+                lbi <- getPersistBuildConfig
+#if MIN_VERSION_Cabal(3,14,0)
+                  Nothing
+                  (makeSymbolicPath rawBuildDir)
+#else
+                  rawBuildDir
+#endif
                 initialBuildSteps rawBuildDir pd lbi verbosity
 
 -- | Temporary, can be removed if initialBuildSteps restored to Cabal's API.
@@ -127,7 +150,14 @@ componentInitialBuildSteps ::
   -> Verbosity -- ^The verbosity to use
   -> IO ()
 componentInitialBuildSteps _distPref pkg_descr lbi clbi verbosity = do
-  createDirectoryIfMissingVerbose verbosity True (componentBuildDir lbi clbi)
+  createDirectoryIfMissingVerbose
+    verbosity
+    True
+#if MIN_VERSION_Cabal(3,14,0)
+    (interpretSymbolicPathCWD $ componentBuildDir lbi clbi)
+#else
+    (componentBuildDir lbi clbi)
+#endif
   -- Cabal-3.10.3.0 used writeAutogenFiles, that generated and wrote out the
   -- Paths_<pkg>.hs, PackageInfo_<pkg>.hs, and cabal_macros.h files. This
   -- appears to be the equivalent function for Cabal-3.11.0.0.

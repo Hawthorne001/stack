@@ -46,7 +46,8 @@ import           Stack.Ghci.Script
                    , scriptToLazyByteString
                    )
 import           Stack.Package
-                   ( buildableExes, buildableForeignLibs, getPackageOpts
+                   ( buildableExes, buildableForeignLibs, buildableSubLibs
+                   , buildableTestSuites, buildableBenchmarks, getPackageOpts
                    , hasBuildableMainLibrary, listOfPackageDeps
                    , packageFromPackageDescription, readDotBuildinfo
                    , resolvePackageDescription, topSortPackageComponent
@@ -57,16 +58,16 @@ import           Stack.Runners ( ShouldReexec (..), withConfig, withEnvConfig )
 import           Stack.Types.Build.Exception
                    ( BuildPrettyException (..), pprintTargetParseErrors )
 import           Stack.Types.BuildConfig
-                   ( BuildConfig (..), HasBuildConfig (..), stackYamlL )
+                   ( BuildConfig (..), HasBuildConfig (..), configFileL )
 import           Stack.Types.BuildOpts ( BuildOpts (..) )
 import qualified Stack.Types.BuildOpts as BenchmarkOpts ( BenchmarkOpts (..) )
 import qualified Stack.Types.BuildOpts as TestOpts ( TestOpts (..) )
 import           Stack.Types.BuildOptsCLI
                    ( ApplyCLIFlag (..), BuildOptsCLI (..), defaultBuildOptsCLI )
-import           Stack.Types.CompCollection ( getBuildableListText )
 import           Stack.Types.CompilerPaths
                    ( CompilerPaths (..), HasCompiler (..) )
 import           Stack.Types.Config ( Config (..), HasConfig (..), buildOptsL )
+import           Stack.Types.Config.Exception ( ConfigPrettyException (..) )
 import           Stack.Types.EnvConfig
                    ( EnvConfig (..), HasEnvConfig (..), actualCompilerVersionL
                    , shaPathForBytes
@@ -212,9 +213,9 @@ ghciCmd ghciOpts =
         bopts <- view buildOptsL
         -- override env so running of tests and benchmarks is disabled
         let boptsLocal = bopts
-              { testOpts = bopts.testOpts { TestOpts.disableRun = True }
+              { testOpts = bopts.testOpts { TestOpts.runTests = False }
               , benchmarkOpts =
-                  bopts.benchmarkOpts { BenchmarkOpts.disableRun = True }
+                  bopts.benchmarkOpts { BenchmarkOpts.runBenchmarks = False }
               }
         local (set buildOptsL boptsLocal) (ghci ghciOpts)
 
@@ -950,21 +951,27 @@ makeGhciPkgInfo installMap installedMap locals addPkgs mfileTargets pkgDesc = do
 -- (differently).
 wantedPackageComponents :: BuildOpts -> Target -> Package -> Set NamedComponent
 wantedPackageComponents _ (TargetComps cs) _ = cs
-wantedPackageComponents bopts (TargetAll PTProject) pkg = S.fromList $
+wantedPackageComponents bopts (TargetAll PTProject) pkg =
      ( if hasBuildableMainLibrary pkg
-         then CLib : map CSubLib buildableForeignLibs'
-         else []
+         then S.insert CLib (S.mapMonotonic CSubLib buildableForeignLibs')
+         else S.empty
      )
-  <> map CExe buildableExes'
-  <> map CSubLib buildableSubLibs
-  <> (if bopts.tests then map CTest buildableTestSuites else [])
-  <> (if bopts.benchmarks then map CBench buildableBenchmarks else [])
+  <> S.mapMonotonic CExe buildableExes'
+  <> S.mapMonotonic CSubLib buildableSubLibs'
+  <> ( if bopts.tests
+         then S.mapMonotonic CTest buildableTestSuites'
+         else S.empty
+     )
+  <> ( if bopts.benchmarks
+         then S.mapMonotonic CBench buildableBenchmarks'
+         else S.empty
+     )
  where
-  buildableForeignLibs' = S.toList $ buildableForeignLibs pkg
-  buildableSubLibs = getBuildableListText pkg.subLibraries
-  buildableExes' = S.toList $ buildableExes pkg
-  buildableTestSuites = getBuildableListText pkg.testSuites
-  buildableBenchmarks = getBuildableListText pkg.benchmarks
+  buildableForeignLibs' = buildableForeignLibs pkg
+  buildableSubLibs' = buildableSubLibs pkg
+  buildableExes' = buildableExes pkg
+  buildableTestSuites' = buildableTestSuites pkg
+  buildableBenchmarks' = buildableBenchmarks pkg
 wantedPackageComponents _ _ _ = S.empty
 
 checkForIssues :: HasTerm env => [GhciPkgInfo] -> RIO env ()
@@ -1141,35 +1148,39 @@ targetWarnings localTargets nonLocalTargets mfileTargets = do
       ]
   when (null localTargets && isNothing mfileTargets) $ do
     smWanted <- view $ buildConfigL . to (.smWanted)
-    stackYaml <- view stackYamlL
-    prettyNote $ vsep
-      [ flow "No project package targets specified, so a plain ghci will be \
-             \started with no package hiding or package options."
-      , ""
-      , flow $ T.unpack $ utf8BuilderToText $
-               "You are using snapshot: " <>
-               display smWanted.snapshotLocation
-      , ""
-      , flow "If you want to use package hiding and options, then you can try \
-             \one of the following:"
-      , ""
-      , bulletedList
-          [ fillSep
-              [ flow "If you want to start a different project configuration \
-                     \than"
-              , pretty stackYaml <> ","
-              , flow "then you can use"
-              , style Shell "stack init"
-              , flow "to create a new stack.yaml for the packages in the \
-                     \current directory."
-              , line
-              ]
-          , flow "If you want to use the project configuration at"
-          , pretty stackYaml <> ","
-          , flow "then you can add to its 'packages' field."
-          ]
-      , ""
-      ]
+    configFile <- view configFileL
+    case configFile of
+      -- A user-specific global configuration file
+      Left _ -> prettyThrowM ConfigFileNotProjectLevelBug
+      -- A project-level configuration file
+      Right projectConfigFile -> prettyNote $ vsep
+        [ flow "No project package targets specified, so a plain ghci will be \
+               \started with no package hiding or package options."
+        , ""
+        , flow $ T.unpack $ utf8BuilderToText $
+                 "You are using snapshot: " <>
+                 display smWanted.snapshotLocation
+        , ""
+        , flow "If you want to use package hiding and options, then you can try \
+               \one of the following:"
+        , ""
+        , bulletedList
+            [ fillSep
+                [ flow "If you want to start a different project configuration \
+                       \than"
+                , pretty projectConfigFile <> ","
+                , flow "then you can use"
+                , style Shell "stack init"
+                , flow "to create a new stack.yaml for the packages in the \
+                       \current directory."
+                , line
+                ]
+            , flow "If you want to use the project configuration at"
+            , pretty projectConfigFile <> ","
+            , flow "then you can add to its 'packages' field."
+            ]
+        , ""
+        ]
 
 -- Adds in intermediate dependencies between ghci targets. Note that it will
 -- return a Lib component for these intermediate dependencies even if they don't

@@ -4,6 +4,86 @@
 
 Release notes:
 
+**Changes since v3.3.1:**
+
+Major changes:
+
+Behavior changes:
+
+* Stack will also warn (message S-8432) if there is any non-ISO/IEC 8859-1
+  (Latin-1) character in Stack's 'programs' path, as `hsc2hs` does not work if
+  there is such a character in the path to its default template
+  `template-hsc.h`.
+* Stack customizes setup using `Cabal`, so if a `setup-depends` field does not
+  mention it as a dependency, Stack warns and adds the GHC boot package as a
+  dependency. Previously, Stack would not do so but only warn that build errors
+  were likely.
+
+Other enhancements:
+
+* In YAML configuration files, the `install-msys` key is introduced, to enable
+  or disable the download and installation of Stack-supplied MSYS2 when
+  necessary (subject to `skip-msys: false`). The default is the same as the
+  `install-ghc` setting (including if that is set at the command line).
+  Consequently, the default behaviour of Stack is unaffected.
+* Add the `stack config set install-msys` command to configure the
+  `install-msys` option in YAML configuration files.
+
+Bug fixes:
+
+## v3.3.1 - 2024-12-28
+
+**Changes since v3.1.1:**
+
+Behavior changes:
+
+* Stack interprets consecutive line ends in the value of the `user-message`
+  project-specific configuration option as a single blank line. Previously all
+  line ends were interpreted as white space.
+* Stack no longer supports Docker versions before Docker 1.9.1 and,
+  consequently, if a Docker container is not being run 'detached', its standard
+  input channel will always be kept open. (Before Docker 1.9.1 the use of an
+  interactive container could hang in certain circumstances.)
+* On Windows, Stack will always warn (message S-8432) if there is a space
+  character in Stack's 'programs' path, as GHC 9.4.1 and later do not work if
+  there is a space in the path to the `ghc` executable. S-8432 now presents as a
+  warning and not an error.
+* Stack respects the `--no-run-tests` and `--no-run-benchmarks` flags when
+  determining build actions. Previously Stack respected the flags when executing
+  the run test suites or run benchmarks actions for each targeted project
+  package.
+
+Other enhancements:
+
+* Consider GHC 9.10 to be a tested compiler and remove warnings.
+* Consider Cabal 3.12 to be a tested library and remove warnings.
+* Add flags `--run-tests` and `--run-benchmarks` (the existing defaults) to
+  Stack's `build` command, which take precedence over the existing
+  `no-run-tests` and `no-run-benchmarks` configuration options, respectively.
+* In configuration files, the `notify-if-no-run-tests` and
+  `notify-if-no-run-benchmarks` keys are introduced, to allow the exisitng
+  notification to be muted if unwanted.
+
+Bug fixes:
+
+* Stack's in-app messages refer to https://haskellstack.org as currently
+  structured. (Most URLs in older Stack versions are redirected.)
+* Stack's `upgrade` command only treats the current running Stack executable
+  as '`stack`' if the executable file is named `stack` or, on Windows,
+  `stack.exe`. Previously only how it was invoked was considered.
+* `stack test --no-run-tests --dry-run` no longer reports that Stack would test
+  project packages with test suites and
+  `stack bench --no-run-benchmarks --dry-run` no longer reports that Stack
+  would benchmark project packages with benchmarks.
+* `StackSetupShim` compiles with `Cabal >= 3.14.0.0`.
+
+## v3.1.1 - 2024-07-28
+
+Release notes:
+
+* The change in major version from 2.x to 3.1 marks the dropping of support for
+  versions of GHC before 8.4, deprecated in Stack 2.15.1.
+
 **Changes since v2.15.7:**
 
 Behavior changes:
@@ -33,9 +113,14 @@ Behavior changes:
   of the compiler specified by the snapshot).
 * `stack build --flag *:[-]<flag_name>` now only applies the flag setting to
   packages for which the Cabal flag is defined, as opposed to all packages.
+* On Unix-like operating systems, drop support for `/etc/stack/config`,
+  deprecated in Stack 0.1.6.0.
+* Drop support for, in the Stack root, directory `global` and file `stack.yaml`,
+  both deprecated in Stack 0.1.6.0.
 
 Other enhancements:
 
+* Bump to Hpack 0.37.0.
 * In YAML configuration files, the `msys-environment` key is introduced to
   allow, on Windows, the MSYS2 environment to be specified. The default
   environment is still `MINGW64` on 64-bit Windows and `MINGW32` on 32-bit
@@ -64,6 +149,11 @@ Other enhancements:
 * Add the `ls globals` command to list all global packages for the version of
   GHC specified by the snapshot.
 * Add `stack -h` (equivalent to `stack --help`).
+* In YAML configuration files, the `file-watch-hook` key is introduced to allow
+  `--file-watch` post-processing to be customised with a executable or `sh`
+  shell script.
+* Add flag `--[no-]allow-newer` to Stack's `build` command, which takes
+  precedence over the existing `allow-newer` configuration option.
 
 Bug fixes:
 
@@ -76,6 +166,13 @@ Bug fixes:
   package keys even for very long package names.
 * The Error S-6362 message now acknowledges when the wanted compiler has been
   specified at the command line.
+* Fix a regression, introduced in Stack 2.11.1, that caused the `script` command
+  to parse an (otherwise ignored) project-level configuration file.
+* Stack no longer makes recommendations about a project-level configuration file
+  when only a global configuration file is in use.
+* Fix a regression, introduced in Stack 2.15.7, that caused GHC 8.10.7 or
+  earlier to fail to build a package with a `Custom` build type, if GHC option
+  `-haddock` was specified.
 
 ## v2.15.7 - 2024-05-12
 
@@ -350,6 +447,11 @@ Behavior changes:
 * On Windows, `stack upgrade` does not offer `sudo` command alternatives if
   attempting to write to the original file name of the running Stack exectuable
   results in a 'Permission' error.
+* On Linux, Stack's `setup` command now distinguishes GHC build
+  `tinfo6-libc6-pre232` from existing `tinfo6`. The former refers to systems
+  where the version of `libc6` (the GNU C Library) is not compatible with
+  version 2.32. `tinfo6-libc6-pre232` is now a possible value for the
+  `ghc-build` configuration option.
 
 Other enhancements:
 
@@ -1298,9 +1400,9 @@ Behavior changes:
   [help file](https://github.com/commercialhaskell/stack-templates/blob/master/STACK_HELP.md)
   with more information on how to discover templates. See:
   [#4039](https://github.com/commercialhaskell/stack/issues/4039)
-* Build tools are now handled in a similar way to `cabal-install`. In
-  particular, for legacy `build-tools` fields, we use a hard-coded
-  list of build tools in place of looking up build tool packages in a
+* Tools used during building ('build tools') are now handled in a similar way to
+  `cabal-install`. In particular, for legacy `build-tools` fields, we use a
+  hard-coded list of build tools in place of looking up build tool packages in a
   tool map. This both brings Stack's behavior closer into line with
   `cabal-install`, avoids some bugs, and opens up some possible
   optimizations/laziness. See:

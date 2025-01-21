@@ -1,4 +1,4 @@
-ARG BUILD_ON_IMAGE=glcr.b-data.ch/ghc/ghc-musl
+ARG BUILD_ON_IMAGE=quay.io/benz0li/ghc-musl
 ARG GHC_VERSION=latest
 ARG HLS_VERSION
 ARG STACK_VERSION
@@ -21,7 +21,7 @@ RUN find /files -type d -exec chmod 755 {} \; \
   && find /files -type f -exec chmod 644 {} \; \
   && find /files/usr/local/bin -type f -exec chmod 755 {} \;
 
-FROM ${BUILD_ON_IMAGE}${HLS_SFX} as hls
+FROM glcr.b-data.ch/ghc/ghc-musl${HLS_SFX} as hls
 
 FROM glcr.b-data.ch/ndmitchell/hlsi:latest as hlsi
 
@@ -68,14 +68,13 @@ RUN if [ -n "$USE_ZSH_FOR_ROOT" ]; then \
     fix-chsh.sh; \
     chsh -s /bin/zsh; \
   fi \
-  ## Update timezone if needed
+  ## Update timezone if requested
   && if [ "$TZ" != "" ]; then \
     apk add --no-cache tzdata; \
-    echo "Setting TZ to $TZ"; \
-    ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime \
-      && echo "$TZ" > /etc/timezone; \
   fi \
-  ## Add/Update locale if needed
+  ## Info about timezone
+  && echo "TZ is set to $TZ" \
+  ## Add/Update locale if requested
   && if [ "$LANG" != "C.UTF-8" ]; then \
     if [ -n "$LANG" ]; then \
       apk add --no-cache musl-locales musl-locales-lang; \
@@ -84,7 +83,9 @@ RUN if [ -n "$USE_ZSH_FOR_ROOT" ]; then \
     sed -i "s/LANG:-C.UTF-8/LANG:-$LANG/" /etc/profile.d/*locale.sh; \
     sed -i "s/LC_COLLATE=C/LC_COLLATE=$LANG/" /etc/profile.d/*locale.sh; \
     sed -i "s/LC_COLLATE:-C/LC_COLLATE:-$LANG/" /etc/profile.d/*locale.sh; \
-  fi
+  fi \
+  ## Info about locale
+  && echo "LANG is set to $LANG"
 
 ## Copy binaries as late as possible to avoid cache busting
 ## Install HLS

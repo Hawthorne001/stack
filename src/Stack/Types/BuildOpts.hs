@@ -16,6 +16,7 @@ module Stack.Types.BuildOpts
 import           Stack.Prelude
 import           Stack.Types.BuildOptsMonoid
                    ( CabalVerbosity (..), ProgressBarFormat (..) )
+import           Stack.Types.Component ( StackUnqualCompName )
 
 -- | Build options that is interpreted by the build command. This is built up
 -- from BuildOptsCLI and BuildOptsMonoid
@@ -79,7 +80,7 @@ data BuildOpts = BuildOpts
     -- ^ Ask Cabal to be verbose in its builds
   , splitObjs :: !Bool
     -- ^ Whether to enable split-objs.
-  , skipComponents :: ![Text]
+  , skipComponents :: ![StackUnqualCompName]
     -- ^ Which components to skip when building
   , interleavedOutput :: !Bool
     -- ^ Should we use the interleaved GHC output when building
@@ -101,7 +102,7 @@ data TestOpts = TestOpts
   { rerunTests :: !Bool -- ^ Whether successful tests will be run gain
   , additionalArgs :: ![String] -- ^ Arguments passed to the test program
   , coverage :: !Bool -- ^ Generate a code coverage report
-  , disableRun :: !Bool -- ^ Disable running of tests
+  , runTests :: !Bool -- ^ Enable running of tests
   , maximumTimeSeconds :: !(Maybe Int) -- ^ test suite timeout in seconds
   , allowStdin :: !Bool -- ^ Whether to allow standard input
   }
@@ -111,8 +112,8 @@ data TestOpts = TestOpts
 data BenchmarkOpts = BenchmarkOpts
   { additionalArgs :: !(Maybe String)
     -- ^ Arguments passed to the benchmark program
-  , disableRun :: !Bool
-    -- ^ Disable running of benchmarks
+  , runBenchmarks :: !Bool
+    -- ^ Enable running of benchmarks
   }
   deriving (Eq, Show)
 

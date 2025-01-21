@@ -83,7 +83,7 @@ instance Pretty InitPrettyException where
   pretty (ConfigFileAlreadyExists reldest) =
     "[S-8009]"
     <> line
-    <> flow "Stack declined to create a project-level YAML configuration file."
+    <> flow "Stack declined to create a project-level configuration file."
     <> blankLine
     <> fillSep
          [ flow "The file"
@@ -94,7 +94,7 @@ instance Pretty InitPrettyException where
   pretty (PackageNameInvalid rels) =
     "[S-5267]"
     <> line
-    <> flow "Stack did not create project-level YAML configuration, as (like \
+    <> flow "Stack did not create project-level configuration, as (like \
             \Hackage) it requires a Cabal file name to match the package it \
             \defines."
     <> blankLine
@@ -115,18 +115,18 @@ instance Pretty InitPrettyException where
   pretty (SnapshotDownloadFailure e) =
     "[S-8332]"
     <> line
-    <> flow "Stack failed to create project-level YAML configuration, as it \
+    <> flow "Stack failed to create project-level configuration file, as it \
             \was unable to download the index of available snapshots."
     <> blankLine
     <> fillSep
          [ flow "This sometimes happens because Certificate Authorities are \
                 \missing on your system. You can try the Stack command again \
                 \or manually create the configuration file. For help about the \
-                \content of Stack's YAML configuration files, see (for the \
-                \most recent release of Stack)"
+                \content of Stack's configuration files, see (for the most \
+                \recent release of Stack)"
          , style
              Url
-             "http://docs.haskellstack.org/en/stable/yaml_configuration/"
+             "http://docs.haskellstack.org/en/stable/configure/yaml/"
            <> "."
          ]
     <> blankLine
@@ -250,30 +250,35 @@ initProject currDir initOpts mASnapshot = do
     getDefaultSnapshot initOpts mASnapshot' pkgDirs
   let ignored = Map.difference bundle rbundle
       dupPkgMsg
-        | dupPkgs /= [] =
+        | dupPkgs /= [] = Just
             "Warning (added by new or init): Some packages were found to have \
-            \names conflicting with others and have been commented out in the \
-            \packages section.\n"
-        | otherwise = ""
+            \names\n\
+            \conflicting with others and have been commented out in the \
+            \packages section."
+        | otherwise = Nothing
       missingPkgMsg
-        | Map.size ignored > 0 =
+        | Map.size ignored > 0 = Just
             "Warning (added by new or init): Some packages were found to be \
-            \incompatible with the snapshot and have been left commented out \
-            \in the packages section.\n"
-        | otherwise = ""
+            \incompatible\n\
+            \with the snapshot and have been left commented out in the \
+            \packages section."
+        | otherwise = Nothing
       extraDepMsg
-        | Map.size extraDeps > 0 =
+        | Map.size extraDeps > 0 = Just
             "Warning (added by new or init): Specified snapshot could not \
-            \satisfy all dependencies. Some external packages have been added \
-            \as dependencies.\n"
-        | otherwise = ""
-      makeUserMsg msgs =
-        let msg = concat msgs
-        in  if msg /= ""
-              then
-                   msg
-                <> "You can omit this message by removing it from stack.yaml\n"
-              else ""
+            \satisfy all\n\
+            \dependencies. Some external packages have been added as \
+            \dependencies."
+        | otherwise = Nothing
+      removalMsg =
+        "You can omit this message by removing it from the project-level \
+        \configuration\n\
+        \file."
+      makeUserMsg mMsgs =
+        let msgs = catMaybes mMsgs
+        in  if null msgs
+              then Nothing
+              else Just $ intercalate "\n\n" (msgs <> [removalMsg]) <> "\n"
       userMsg = makeUserMsg [dupPkgMsg, missingPkgMsg, extraDepMsg]
       gpdByDir =
         Map.fromList [ (parent fp, gpd) | (fp, gpd) <- Map.elems bundle]
@@ -284,7 +289,7 @@ initProject currDir initOpts mASnapshot = do
       completePackageLocation
         (RPLIHackage (PackageIdentifierRevision n v CFILatest) Nothing)
   let project = Project
-        { userMsg = if userMsg == "" then Nothing else Just userMsg
+        { userMsg
         , packages = resolvedRelative <$> Map.elems rbundle
         , extraDeps = map toRawPL deps
         , flagsByPkg = removeSrcPkgDefaultFlags gpds flags
@@ -296,8 +301,8 @@ initProject currDir initOpts mASnapshot = do
         }
       makeRel = fmap toFilePath . makeRelativeToCurrentDir
   prettyInfoL
-    [ flow "Initialising Stack's project-level YAML configuration file \
-           \using snapshot"
+    [ flow "Initialising Stack's project-level configuration file using \
+           \snapshot"
     , pretty (PrettyRawSnapshotLocation snapshot) <> "."
     ]
   prettyInfoL $
@@ -342,7 +347,7 @@ initProject currDir initOpts mASnapshot = do
     (Map.elems $ fmap (makeRelDir . parent . fst) ignored)
     (map (makeRelDir . parent) dupPkgs)
   prettyInfoS
-    "Stack's project-level YAML configuration file has been initialised."
+    "Stack's project-level configuration file has been initialised."
 
 -- | Render a stack.yaml file with comments, see:
 -- https://github.com/commercialhaskell/stack/issues/226
@@ -419,22 +424,22 @@ renderStackYaml p ignoredPackages dupPackages =
     , ""
     , "Some commonly used options have been documented as comments in this file."
     , "For advanced use and comprehensive documentation of the format, please see:"
-    , "https://docs.haskellstack.org/en/stable/yaml_configuration/"
+    , "https://docs.haskellstack.org/en/stable/configure/yaml/"
     ]
   snapshotHelp = commentHelp
     [ "A 'specific' Stackage snapshot or a compiler version."
     , "A snapshot resolver dictates the compiler version and the set of packages"
     , "to be used for project dependencies. For example:"
     , ""
-    , "snapshot: lts-22.21"
-    , "snapshot: nightly-2024-05-06"
-    , "snapshot: ghc-9.6.5"
+    , "snapshot: lts-23.0"
+    , "snapshot: nightly-2024-12-13"
+    , "snapshot: ghc-9.8.4"
     , ""
     , "The location of a snapshot can be provided as a file or url. Stack assumes"
     , "a snapshot provided as a file might change, whereas a url resource does not."
     , ""
     , "snapshot: ./custom-snapshot.yaml"
-    , "snapshot: https://example.com/snapshots/2023-01-01.yaml"
+    , "snapshot: https://example.com/snapshots/2024-01-01.yaml"
     ]
   userMsgHelp = commentHelp
     [ "A warning or info to be displayed to the user on config load." ]
@@ -552,7 +557,7 @@ getWorkingSnapshotPlan initOpts pkgDirs0 snapCandidate snapLoc = do
         | Map.null available -> do
             prettyWarnS
               "Could not find a working plan for any of the user packages. \
-              \Proceeding to create a YAML configuration file anyway."
+              \Proceeding to create a project-level configuration file anyway."
             pure (snapLoc, Map.empty, Map.empty, Map.empty)
         | otherwise -> do
             when (Map.size available == Map.size pkgDirs) $
@@ -638,7 +643,7 @@ getRecommendedSnapshots snapshots =
 -- |Yields the minimum LTS supported by Stack.
 minSupportedLts :: SnapName
 -- See https://github.com/commercialhaskell/stack/blob/master/ChangeLog.md
--- under Stack version UNRELEASED.
+-- under Stack version 3.1.1.
 minSupportedLts = LTS 12 0
 
 findCabalDirs ::

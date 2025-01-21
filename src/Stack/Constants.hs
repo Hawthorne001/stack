@@ -25,11 +25,8 @@ module Stack.Constants
   , stackProgNameUpper
   , wiredInPackages
   , cabalPackageName
-  , implicitGlobalProjectDirDeprecated
   , implicitGlobalProjectDir
-  , defaultUserConfigPathDeprecated
   , defaultUserConfigPath
-  , defaultGlobalConfigPathDeprecated
   , defaultGlobalConfigPath
   , platformVariantEnvVar
   , compilerOptionsCabalFlag
@@ -262,7 +259,7 @@ wiredInPackages = case mparsed of
       -- A magic package
     , "integer-gmp"
       -- No longer magic > 1.0.3.0 (GHC >= 9.0) and deprecated in favour of
-      -- ghc-bignum. With GHC 9.6.5 at least, there seems to be no problem in
+      -- ghc-bignum. With GHC 9.8.4 at least, there seems to be no problem in
       -- using it.
     , "integer-simple"
       -- A magic package
@@ -277,7 +274,7 @@ wiredInPackages = case mparsed of
       -- if they were defined in modules all sharing a common package
       -- interactive. See 'Note [The interactive package]' at
       -- https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Runtime/Context.hs
-      -- With GHC 9.6.5 at least, there seems to be no problem in using it.
+      -- With GHC 9.8.4 at least, there seems to be no problem in using it.
     ]
 
 -- | Just to avoid repetition and magic strings.
@@ -285,38 +282,19 @@ cabalPackageName :: PackageName
 cabalPackageName =
     mkPackageName "Cabal"
 
--- | Deprecated implicit global project directory used when outside of a project.
-implicitGlobalProjectDirDeprecated :: Path Abs Dir -- ^ Stack root.
-                                   -> Path Abs Dir
-implicitGlobalProjectDirDeprecated p =
-    p </>
-    $(mkRelDir "global")
-
 -- | Implicit global project directory used when outside of a project.
 -- Normally, @getImplicitGlobalProjectDir@ should be used instead.
-implicitGlobalProjectDir :: Path Abs Dir -- ^ Stack root.
-                         -> Path Abs Dir
-implicitGlobalProjectDir p =
-    p </>
-    $(mkRelDir "global-project")
+implicitGlobalProjectDir ::
+     Path Abs Dir -- ^ Stack root.
+  -> Path Abs Dir
+implicitGlobalProjectDir p = p </> $(mkRelDir "global-project")
 
--- | Deprecated default global config path.
-defaultUserConfigPathDeprecated :: Path Abs Dir -> Path Abs File
-defaultUserConfigPathDeprecated = (</> $(mkRelFile "stack.yaml"))
-
--- | Default global config path.
--- Normally, @getDefaultUserConfigPath@ should be used instead.
+-- | Default user global configuration path. Normally,
+-- @getDefaultUserConfigPath@ should be used instead.
 defaultUserConfigPath :: Path Abs Dir -> Path Abs File
 defaultUserConfigPath = (</> $(mkRelFile "config.yaml"))
 
--- | Deprecated default global config path.
--- Note that this will be @Nothing@ on Windows, which is by design.
-defaultGlobalConfigPathDeprecated :: Maybe (Path Abs File)
-defaultGlobalConfigPathDeprecated = parseAbsFile "/etc/stack/config"
-
--- | Default global config path.
--- Normally, @getDefaultGlobalConfigPath@ should be used instead.
--- Note that this will be @Nothing@ on Windows, which is by design.
+-- | Default global config path. On Windows, by design, this will be @Nothing@.
 defaultGlobalConfigPath :: Maybe (Path Abs File)
 defaultGlobalConfigPath = parseAbsFile "/etc/stack/config.yaml"
 

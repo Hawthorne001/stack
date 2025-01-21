@@ -15,11 +15,11 @@ module Stack.Build
   ) where
 
 import           Data.Attoparsec.Args ( EscapingMode (Escaping), parseArgs )
+import qualified Data.Either.Extra as EE
 import           Data.List ( (\\) )
 import           Data.List.Extra ( groupSort )
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Text as T
 -- import qualified Distribution.PackageDescription as C
 -- import           Distribution.Types.Dependency ( Dependency (..), depLibraries )
 import           Distribution.Version ( mkVersion )
@@ -41,7 +41,7 @@ import           Stack.Types.Build
                    )
 import           Stack.Types.Build.Exception
                    ( BuildException (..), BuildPrettyException (..) )
-import           Stack.Types.BuildConfig ( HasBuildConfig, stackYamlL )
+import           Stack.Types.BuildConfig ( HasBuildConfig, configFileL )
 import           Stack.Types.BuildOpts ( BuildOpts (..) )
 import           Stack.Types.BuildOptsCLI
                    ( BuildCommand (..), BuildOptsCLI (..), FileWatchOpts (..) )
@@ -51,9 +51,9 @@ import           Stack.Types.BuildOptsMonoid
                    )
 import           Stack.Types.Compiler ( getGhcVersion )
 import           Stack.Types.CompilerPaths ( HasCompiler, cabalVersionL )
-import           Stack.Types.Config
-                   ( Config (..), HasConfig (..), buildOptsL
-                   )
+import           Stack.Types.ComponentUtils
+                   ( StackUnqualCompName, unqualCompToString )
+import           Stack.Types.Config ( Config (..), HasConfig (..), buildOptsL )
 import           Stack.Types.ConfigureOpts ( BaseConfigOpts (..) )
 import           Stack.Types.EnvConfig
                    ( EnvConfig (..), HasEnvConfig (..), HasSourceMap
@@ -70,8 +70,7 @@ import           Stack.Types.Package
 import           Stack.Types.Platform ( HasPlatform (..) )
 import           Stack.Types.Runner ( Runner, globalOptsL )
 import           Stack.Types.SourceMap
-                   ( SMTargets (..)
-                   , SourceMap (..), Target (..) )
+                   ( SMTargets (..), SourceMap (..), Target (..) )
 import           System.Terminal ( fixCodePage )
 
 newtype CabalVersionPrettyException
@@ -111,15 +110,20 @@ buildCmd opts = do
     prettyThrowIO GHCProfOptionInvalid
   local (over globalOptsL modifyGO) $
     case opts.fileWatch of
-      FileWatchPoll -> fileWatchPoll (inner . Just)
-      FileWatch -> fileWatch (inner . Just)
+      FileWatchPoll -> withFileWatchHook fileWatchPoll
+      FileWatch -> withFileWatchHook fileWatch
       NoFileWatch -> inner Nothing
  where
+  withFileWatchHook fileWatchAction =
+    -- This loads the full configuration in order to obtain the file-watch-hook
+    -- setting. That is likely not the most efficient approach.
+    withConfig YesReexec $ withEnvConfig NeedTargets opts $
+      fileWatchAction (inner . Just)
   inner ::
        Maybe (Set (Path Abs File) -> IO ())
     -> RIO Runner ()
   inner setLocalFiles = withConfig YesReexec $ withEnvConfig NeedTargets opts $
-      Stack.Build.build setLocalFiles
+    Stack.Build.build setLocalFiles
   -- Read the build command from the CLI and enable it to run
   modifyGO =
     case opts.command of
@@ -153,11 +157,13 @@ build msetLocalFiles = do
     sourceMap <- view $ envConfigL . to (.sourceMap)
     locals <- projectLocalPackages
     depsLocals <- localDependencies
-    let allLocals = locals <> depsLocals
-
     boptsCli <- view $ envConfigL . to (.buildOptsCLI)
     -- Set local files, necessary for file watching
-    stackYaml <- view stackYamlL
+    configFile <- view configFileL
+    let allLocals = locals <> depsLocals
+        -- We are indifferent as to whether the configuration file is a
+        -- user-specifc global or a project-level one.
+        eitherConfigFile = EE.fromEither configFile
     for_ msetLocalFiles $ \setLocalFiles -> do
       files <-
         if boptsCli.watchAll
@@ -171,7 +177,7 @@ build msetLocalFiles = do
               lpFiles lp
             Just (TargetComps components) ->
               lpFilesForComponents components lp
-      liftIO $ setLocalFiles $ Set.insert stackYaml $ Set.unions files
+      liftIO $ setLocalFiles $ Set.insert eitherConfigFile $ Set.unions files
 
     checkComponentsBuildable allLocals
 
@@ -263,7 +269,7 @@ warnIfExecutablesWithSameNameCouldBeOverwritten locals plan = do
             ","
             [ style
                 PkgComponent
-                (fromString $ packageNameString p <> ":" <> T.unpack exe)
+                (fromString $ packageNameString p <> ":" <> unqualCompToString exe)
             | p <- pkgs
             ]
     prettyWarnL $
@@ -292,7 +298,7 @@ warnIfExecutablesWithSameNameCouldBeOverwritten locals plan = do
   --                   , package names for other project packages that have an
   --                     executable with the same name
   --                   )
-  warnings :: Map Text ([PackageName],[PackageName])
+  warnings :: Map StackUnqualCompName ([PackageName],[PackageName])
   warnings =
     Map.mapMaybe
       (\(pkgsToBuild, localPkgs) ->
@@ -312,7 +318,7 @@ warnIfExecutablesWithSameNameCouldBeOverwritten locals plan = do
             -- Both cases warrant a warning.
             Just (NE.toList pkgsToBuild, otherLocals))
       (Map.intersectionWith (,) exesToBuild localExes)
-  exesToBuild :: Map Text (NonEmpty PackageName)
+  exesToBuild :: Map StackUnqualCompName (NonEmpty PackageName)
   exesToBuild =
     collect
       [ (exe, pkgName')
@@ -320,7 +326,7 @@ warnIfExecutablesWithSameNameCouldBeOverwritten locals plan = do
       , TTLocalMutable lp <- [task.taskType]
       , exe <- (Set.toList . exeComponents . (.components)) lp
       ]
-  localExes :: Map Text (NonEmpty PackageName)
+  localExes :: Map StackUnqualCompName (NonEmpty PackageName)
   localExes =
     collect
       [ (exe, pkg.name)
