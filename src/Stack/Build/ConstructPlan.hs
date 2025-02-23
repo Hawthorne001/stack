@@ -51,7 +51,7 @@ import           Stack.Types.Build.Exception
                    , BuildPrettyException (..), ConstructPlanException (..)
                    )
 import           Stack.Types.BuildConfig
-                   ( BuildConfig (..), HasBuildConfig (..), stackYamlL )
+                   ( BuildConfig (..), HasBuildConfig (..), configFileL )
 import           Stack.Types.BuildOpts ( BuildOpts (..) )
 import           Stack.Types.BuildOptsCLI
                    ( BuildOptsCLI (..), BuildSubset (..) )
@@ -59,12 +59,13 @@ import           Stack.Types.CompCollection ( collectionMember )
 import           Stack.Types.Compiler ( WhichCompiler (..) )
 import           Stack.Types.CompilerPaths
                    ( CompilerPaths (..), HasCompiler (..) )
+import           Stack.Types.ComponentUtils ( unqualCompFromText )
 import           Stack.Types.Config ( Config (..), HasConfig (..), stackRootL )
 import           Stack.Types.ConfigureOpts ( BaseConfigOpts (..) )
 import qualified Stack.Types.ConfigureOpts as ConfigureOpts
 import           Stack.Types.Curator ( Curator (..) )
 import           Stack.Types.Dependency ( DepValue (..), isDepTypeLibrary )
-import           Stack.Types.DumpPackage ( DumpPackage (..), dpParentLibIdent )
+import           Stack.Types.DumpPackage ( DumpPackage (..), sublibParentPkgId )
 import           Stack.Types.EnvConfig ( EnvConfig (..), HasEnvConfig (..) )
 import           Stack.Types.EnvSettings
                    ( EnvSettings (..), minimalEnvSettings )
@@ -187,13 +188,13 @@ constructPlan
                 else Map.empty
           }
       else do
-        stackYaml <- view stackYamlL
+        configFile <- view configFileL
         stackRoot <- view stackRootL
         isImplicitGlobal <-
           view $ configL . to (isPCGlobalProject . (.project))
         prettyThrowM $ ConstructPlanFailed
           errs
-          stackYaml
+          configFile
           stackRoot
           isImplicitGlobal
           parents
@@ -370,7 +371,7 @@ mkUnregisterLocal tasks dirtyReason localDumpPkgs initialBuildSteps =
    where
     gid = dp.ghcPkgId
     ident = dp.packageIdent
-    mParentLibId = dpParentLibIdent dp
+    mParentLibId = sublibParentPkgId dp
     deps = dp.depends
 
   maybeUnregisterReason ::
@@ -620,10 +621,11 @@ tellExecutablesPackage loc p = do
 
 -- | Given a 'PackageSource' and perhaps an 'Installed' value, adds build
 -- 'Task's for the package and its dependencies.
-installPackage :: PackageName
-               -> PackageSource
-               -> Maybe Installed
-               -> M (Either ConstructPlanException AddDepRes)
+installPackage ::
+     PackageName
+  -> PackageSource
+  -> Maybe Installed
+  -> M (Either ConstructPlanException AddDepRes)
 installPackage name ps minstalled = do
   ctx <- ask
   case ps of
@@ -895,8 +897,11 @@ adrInRange ::
 adrInRange pkgId name range adr = if adrVersion adr `withinRange` range
   then pure True
   else do
-    allowNewer <- view $ configL . to (.allowNewer)
-    allowNewerDeps <- view $ configL . to (.allowNewerDeps)
+    config <- view configL
+    allowNewerCLI <- view $ envConfigL . to (.buildOptsCLI) . to (.allowNewer)
+    let allowNewerConfig = config.allowNewer
+        allowNewer = fromFirst False $ allowNewerCLI <> allowNewerConfig
+        allowNewerDeps = config.allowNewerDeps
     if allowNewer
       then case allowNewerDeps of
         Nothing -> do
@@ -1182,7 +1187,8 @@ checkAndWarnForUnknownTools p = do
   -- From Cabal 1.12, build-tools can specify another executable in the same
   -- package.
   notPackageExe toolName =
-    MaybeT $ skipIf $ collectionMember toolName p.executables
+    MaybeT $ skipIf $
+      collectionMember (unqualCompFromText toolName) p.executables
   warn name = MaybeT . pure . Just $ ToolWarning (ExeName name) p.name
   skipIf p' = pure $ if p' then Nothing else Just ()
 
@@ -1229,9 +1235,10 @@ logDebugPlanS s msg = do
 -- value; and (2) a pair of an 'InstallLocation' value and an 'Installed' value.
 -- Checks that the version of the 'PackageSource' value and the version of the
 -- `Installed` value are the same.
-combineSourceInstalled :: PackageSource
-                       -> (InstallLocation, Installed)
-                       -> PackageInfo
+combineSourceInstalled ::
+     PackageSource
+  -> (InstallLocation, Installed)
+  -> PackageInfo
 combineSourceInstalled ps (location, installed) =
   assert (psVersion ps == installedVersion installed) $
     case location of

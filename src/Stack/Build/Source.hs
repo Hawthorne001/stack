@@ -31,8 +31,8 @@ import           Stack.Package
 import           Stack.PackageFile ( getPackageFile )
 import           Stack.Prelude
 import           Stack.SourceMap
-                   ( DumpedGlobalPackage, getCompilerInfo, immutableLocSha
-                   , mkProjectPackage, pruneGlobals
+                   ( getCompilerInfo, immutableLocSha, mkProjectPackage
+                   , pruneGlobals
                    )
 import           Stack.Types.ApplyGhcOptions ( ApplyGhcOptions (..) )
 import           Stack.Types.ApplyProgOptions ( ApplyProgOptions (..) )
@@ -48,6 +48,7 @@ import           Stack.Types.CabalConfigKey ( CabalConfigKey (..) )
 import           Stack.Types.CompilerPaths ( HasCompiler, getCompilerPath )
 import           Stack.Types.Config ( Config (..), HasConfig (..), buildOptsL )
 import           Stack.Types.Curator ( Curator (..) )
+import           Stack.Types.DumpPackage ( DumpedGlobalPackage )
 import           Stack.Types.EnvConfig
                    ( EnvConfig (..), HasEnvConfig (..), HasSourceMap (..)
                    , actualCompilerVersionL
@@ -490,10 +491,11 @@ checkBuildCache oldCache files = do
       fileDigests
       oldCache
  where
-  go :: FilePath
-     -> Maybe SHA256
-     -> Maybe FileCacheInfo
-     -> RIO env (Set FilePath, Map FilePath FileCacheInfo)
+  go ::
+       FilePath
+    -> Maybe SHA256
+    -> Maybe FileCacheInfo
+    -> RIO env (Set FilePath, Map FilePath FileCacheInfo)
   -- Filter out the cabal_macros file to avoid spurious recompilations
   go fp _ _ | takeFileName fp == "cabal_macros.h" = pure (Set.empty, Map.empty)
   -- Common case where it's in the cache and on the filesystem.

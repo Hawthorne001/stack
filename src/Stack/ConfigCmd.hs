@@ -43,6 +43,7 @@ import           Stack.Prelude
 import           Stack.Types.Config ( Config (..), HasConfig (..) )
 import           Stack.Types.ConfigMonoid
                    ( configMonoidInstallGHCName
+                   , configMonoidInstallMsysName
                    , configMonoidRecommendStackUpgradeName
                    , configMonoidSystemGHCName
                    )
@@ -71,6 +72,7 @@ data ConfigCmdSet
   | ConfigCmdSetResolver !(Unresolved AbstractSnapshot)
   | ConfigCmdSetSystemGhc !CommandScope !Bool
   | ConfigCmdSetInstallGhc !CommandScope !Bool
+  | ConfigCmdSetInstallMsys !CommandScope !Bool
   | ConfigCmdSetRecommendStackUpgrade !CommandScope !Bool
   | ConfigCmdSetDownloadPrefix !CommandScope !Text
 
@@ -86,6 +88,7 @@ configCmdSetScope (ConfigCmdSetSnapshot _) = CommandScopeProject
 configCmdSetScope (ConfigCmdSetResolver _) = CommandScopeProject
 configCmdSetScope (ConfigCmdSetSystemGhc scope _) = scope
 configCmdSetScope (ConfigCmdSetInstallGhc scope _) = scope
+configCmdSetScope (ConfigCmdSetInstallMsys scope _) = scope
 configCmdSetScope (ConfigCmdSetRecommendStackUpgrade scope _) = scope
 configCmdSetScope (ConfigCmdSetDownloadPrefix scope _) = scope
 
@@ -101,11 +104,10 @@ cfgCmdSet cmd = do
         mstackYaml <- getProjectConfig mstackYamlOption
         case mstackYaml of
           PCProject stackYaml -> pure stackYaml
-          PCGlobalProject ->
-            fmap (</> stackDotYaml) (getImplicitGlobalProjectDir conf)
+          PCGlobalProject -> getImplicitGlobalProjectDir <&> (</> stackDotYaml)
           PCNoProject _extraDeps -> throwIO NoProjectConfigAvailable
           -- maybe modify the ~/.stack/config.yaml file instead?
-      CommandScopeGlobal -> pure conf.userConfigPath
+      CommandScopeGlobal -> pure conf.userGlobalConfigFile
   rawConfig <- liftIO (readFileUtf8 (toFilePath configFilePath))
   config <- either throwM pure (Yaml.decodeEither' $ encodeUtf8 rawConfig)
   newValue <- cfgCmdSetValue (parent configFilePath) cmd
@@ -268,6 +270,7 @@ cfgCmdSetValue root (ConfigCmdSetResolver newSnapshot) =
   snapshotValue root newSnapshot
 cfgCmdSetValue _ (ConfigCmdSetSystemGhc _ bool') = pure $ Yaml.Bool bool'
 cfgCmdSetValue _ (ConfigCmdSetInstallGhc _ bool') = pure $ Yaml.Bool bool'
+cfgCmdSetValue _ (ConfigCmdSetInstallMsys _ bool') = pure $ Yaml.Bool bool'
 cfgCmdSetValue _ (ConfigCmdSetRecommendStackUpgrade _ bool') =
   pure $ Yaml.Bool bool'
 cfgCmdSetValue _ (ConfigCmdSetDownloadPrefix _ url) = pure $ Yaml.String url
@@ -289,6 +292,7 @@ cfgCmdSetKeys (ConfigCmdSetSnapshot _) = [["snapshot"], ["resolver"]]
 cfgCmdSetKeys (ConfigCmdSetResolver _) = [["resolver"], ["snapshot"]]
 cfgCmdSetKeys (ConfigCmdSetSystemGhc _ _) = [[configMonoidSystemGHCName]]
 cfgCmdSetKeys (ConfigCmdSetInstallGhc _ _) = [[configMonoidInstallGHCName]]
+cfgCmdSetKeys (ConfigCmdSetInstallMsys _ _) = [[configMonoidInstallMsysName]]
 cfgCmdSetKeys (ConfigCmdSetRecommendStackUpgrade _ _) =
   [[configMonoidRecommendStackUpgradeName]]
 cfgCmdSetKeys (ConfigCmdSetDownloadPrefix _ _) =
@@ -342,6 +346,14 @@ configCmdSetParser =
               ( OA.progDesc
                   "Configure whether or not Stack should automatically install \
                   \GHC when necessary." ))
+      , OA.command (T.unpack configMonoidInstallMsysName)
+          ( OA.info
+              (   ConfigCmdSetInstallMsys
+              <$> globalScopeFlag
+              <*> boolArgument )
+              ( OA.progDesc
+                  "Configure whether or not Stack should automatically install \
+                  \MSYS2 when necessary." ))
       , OA.command (T.unpack configMonoidRecommendStackUpgradeName)
           ( OA.info
               (   ConfigCmdSetRecommendStackUpgrade

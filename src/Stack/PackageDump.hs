@@ -34,7 +34,7 @@ import           Stack.Component ( fromCabalName )
 import           Stack.GhcPkg ( createDatabase )
 import           Stack.Prelude
 import           Stack.Types.CompilerPaths ( GhcPkgExe (..), HasCompiler (..) )
-import           Stack.Types.Component ( StackUnqualCompName(..) )
+import           Stack.Types.ComponentUtils ( unqualCompFromText )
 import           Stack.Types.DumpPackage ( DumpPackage (..), SublibDump (..) )
 import           Stack.Types.GhcPkgId ( GhcPkgId, parseGhcPkgId )
 
@@ -189,9 +189,10 @@ pruneDeps getName getId getDepends chooseBest =
 
 -- | Find the package IDs matching the given constraints with all dependencies installed.
 -- Packages not mentioned in the provided @Map@ are allowed to be present too.
-sinkMatching :: Monad m
-             => Map PackageName Version -- ^ allowed versions
-             -> ConduitM DumpPackage o m (Map PackageName DumpPackage)
+sinkMatching ::
+     Monad m
+  => Map PackageName Version -- ^ allowed versions
+  -> ConduitM DumpPackage o m (Map PackageName DumpPackage)
 sinkMatching allowed =
     Map.fromList
   . map (pkgName . (.packageIdent) &&& id)
@@ -261,7 +262,7 @@ conduitDumpPackage = (.| CL.catMaybes) $ eachSection $ do
               fromCabalName libName'
             MungedPackageName _parentPackageName _ -> ""
           libName =
-            maybe getLibNameFromLegacyName StackUnqualCompName maybeLibName
+            maybe getLibNameFromLegacyName unqualCompFromText maybeLibName
           sublib = flip SublibDump libName <$> maybePackageName
           parseQuoted key =
             case mapM (P.parseOnly (argsParser NoEscaping)) val of
@@ -307,9 +308,10 @@ stripSuffixText x y
 type Line = Text
 
 -- | Apply the given Sink to each section of output, broken by a single line containing ---
-eachSection :: Monad m
-            => ConduitM Line Void m a
-            -> ConduitM Text a m ()
+eachSection ::
+     Monad m
+  => ConduitM Line Void m a
+  -> ConduitM Text a m ()
 eachSection inner = CL.map (T.filter (/= '\r')) .| CT.lines .| start
  where
   peekText = await >>= maybe (pure Nothing) (\bs ->
@@ -326,9 +328,10 @@ eachSection inner = CL.map (T.filter (/= '\r')) .| CT.lines .| start
     start
 
 -- | Grab each key/value pair
-eachPair :: Monad m
-         => (Text -> ConduitM Line Void m a)
-         -> ConduitM Line a m ()
+eachPair ::
+     Monad m
+  => (Text -> ConduitM Line Void m a)
+  -> ConduitM Line a m ()
 eachPair inner = start
  where
   start = await >>= maybe (pure ()) start'

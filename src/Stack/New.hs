@@ -333,9 +333,10 @@ loadTemplate name logIt = do
       downloadFromUrl settings templateDir
 
  where
-  loadLocalFile :: Path b File
-                -> (ByteString -> Either String Text)
-                -> RIO env Text
+  loadLocalFile ::
+       Path b File
+    -> (ByteString -> Either String Text)
+    -> RIO env Text
   loadLocalFile path extract = do
     logDebug $
          "Opening local template: \""
@@ -386,10 +387,11 @@ loadTemplate name logIt = do
       (useCachedVersionOrThrow url path)
     loadLocalFile path extract
 
-  useCachedVersionOrThrow :: String
-                          -> Path Abs File
-                          -> VerifiedDownloadException
-                          -> RIO env ()
+  useCachedVersionOrThrow ::
+       String
+    -> Path Abs File
+    -> VerifiedDownloadException
+    -> RIO env ()
   useCachedVersionOrThrow url path exception = do
     exists <- doesFileExist path
 
@@ -571,7 +573,7 @@ applyTemplate project template nonceParams dir templateText = do
     prettyNote $
       missingParameters
         missingKeys
-        config.userConfigPath
+        config.userGlobalConfigFile
   pure $ M.fromList results
  where
   onlyMissingKeys (Mustache.VariableNotFound ks) = map T.unpack ks
@@ -594,8 +596,7 @@ applyTemplate project template nonceParams dir templateText = do
          )
     <> blankLine
     <> fillSep
-         [ flow "You can provide them in Stack's global YAML configuration \
-                \file"
+         [ flow "You can provide them in Stack's global configuration file"
          , "(" <> pretty userConfigPath <> ")"
          , "like this:"
          ]

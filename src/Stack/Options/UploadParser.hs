@@ -34,7 +34,7 @@ uploadOptsParser = UploadOpts
     (  metavar "ITEM"
     <> completer dirCompleter
     <> help "A relative path to a package directory or, for package upload \
-            \only, an sdist tarball."
+            \only, an sdist tarball. Can be specified multiple times."
     ))
   documentationParser = flag False True
     (  long "documentation"
@@ -57,16 +57,16 @@ uploadOptsParser = UploadOpts
         Right v -> pure v
   ignoreCheckSwitch = switch
       (  long "ignore-check"
-      <> help "For package upload, do not check packages for common mistakes."
+      <> help "Do not check packages, for upload, for common mistakes."
       )
   buildPackageOption = boolFlags False
       "test-tarball"
-      "building of the resulting sdist tarball(s), for package upload."
+      "building of the resulting generated files, for package upload."
       idm
   tarDirParser = optional (strOption
     (  long "tar-dir"
-    <> help "For package upload, if specified, copy all the tar to this \
-            \directory."
+    <> help "If specified, copy all the generated files, for package upload, \
+            \to this directory."
     ))
   uploadVariantParser = flag Publishing Candidate
     (  long "candidate"

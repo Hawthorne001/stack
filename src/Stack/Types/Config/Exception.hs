@@ -33,6 +33,7 @@ data ConfigException
   | UnableToExtractArchive Text (Path Abs File)
   | BadStackVersionException VersionRange
   | NoSuchDirectory FilePath
+  | NoSuchFile FilePath
   | ParseGHCVariantException String
   | BadStackRoot (Path Abs Dir)
   | Won'tCreateStackRootInDirectoryOwnedByDifferentUser
@@ -54,7 +55,7 @@ instance Exception ConfigException where
     , T.unpack url
     , "':\n"
     , Yaml.prettyPrintParseException exception
-    , "\nSee https://docs.haskellstack.org/en/stable/custom_snapshot/"
+    , "\nSee https://docs.haskellstack.org/en/stable/topics/custom_snapshot/"
     ]
   displayException (NoProjectConfigFound dir mcmd) = concat
     [ "Error: [S-2206]\n"
@@ -96,6 +97,11 @@ instance Exception ConfigException where
     [ "Error: [S-8773]\n"
     , "No directory could be located matching the supplied path: "
     , dir
+    ]
+  displayException (NoSuchFile file) = concat
+    [ "Error: [S-4335]\n"
+    , "No file could be located matching the supplied path: "
+    , file
     ]
   displayException (ParseGHCVariantException v) = concat
     [ "Error: [S-3938]\n"
@@ -161,6 +167,8 @@ data ConfigPrettyException
   | DuplicateLocalPackageNames ![(PackageName, [PackageLocation])]
   | BadMsysEnvironment !MsysEnvironment !Arch
   | NoMsysEnvironmentBug
+  | ConfigFileNotProjectLevelBug
+  | NoExecutablePath !String
   deriving (Show, Typeable)
 
 instance Pretty ConfigPrettyException where
@@ -170,7 +178,7 @@ instance Pretty ConfigPrettyException where
     <> fillSep
          [ flow "Stack could not load and parse"
          , pretty configFile
-         , flow "as a YAML configuraton file."
+         , flow "as a configuraton file."
          ]
     <> blankLine
     <> flow "While loading and parsing, Stack encountered the following \
@@ -179,11 +187,11 @@ instance Pretty ConfigPrettyException where
     <> string (Yaml.prettyPrintParseException exception)
     <> blankLine
     <> fillSep
-         [ flow "For help about the content of Stack's YAML configuration \
-                \files, see (for the most recent release of Stack)"
+         [ flow "For help about the content of Stack's configuration files, \
+                \see (for the most recent release of Stack)"
          ,    style
                 Url
-                "http://docs.haskellstack.org/en/stable/yaml_configuration/"
+                "http://docs.haskellstack.org/en/stable/configure/yaml/"
            <> "."
          ]
   pretty (StackWorkEnvNotRelativeDir x) =
@@ -229,6 +237,16 @@ instance Pretty ConfigPrettyException where
          ]
   pretty NoMsysEnvironmentBug = bugPrettyReport "[S-5006]" $
     flow "No default MSYS2 environment."
+  pretty ConfigFileNotProjectLevelBug = bugPrettyReport "[S-8398]" $
+    flow "The configuration file is not a project-level one."
+  pretty (NoExecutablePath progName) =
+    "[S-6890]"
+    <> line
+    <> fillSep
+         [ flow "The path for the executable file invoked as"
+         , style Shell (fromString progName)
+         , flow "can not be identified."
+         ]
 
 instance Exception ConfigPrettyException
 

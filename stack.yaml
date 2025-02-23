@@ -1,14 +1,12 @@
-snapshot: lts-22.21 # GHC 9.6.5
+snapshot: lts-23.8 # GHC 9.8.4
 
 extra-deps:
-# lts-22.21 provides pantry-0.9.3.2.
-- pantry-0.10.0@sha256:6f99ee8d7cfeeb0e2513638618acf80c72d018e7f10120048fa120a409b9dcd2,7864
-# lts-22.21 provides tar-0.5.1.1, which does not support Unicode filenames:
-- tar-0.6.2.0@sha256:619828cae098a7b6deeb0316e12f55011101d88f756787ed024ceedb81cf1eba,4576
+# lts-23.8 provides hpack-0.37.0
+- hpack-0.38.0
 
 docker:
   enable: false
-  repo: quay.io/benz0li/ghc-musl:9.6.5
+  repo: quay.io/benz0li/ghc-musl:9.8.4
 
 nix:
   # --nix on the command-line to enable.

@@ -44,7 +44,7 @@ import           Path.Extra ( toFilePathNoTrailingSep )
 import           Path.IO
                    ( copyFile, doesDirExist, doesFileExist, ensureDir
                    , getCurrentDir, getHomeDir, getModificationTime, listDir
-                   , removeDirRecur, removeFile, resolveFile'
+                   , removeDirRecur, removeFile
                    )
 import qualified RIO.Directory ( makeAbsolute )
 import           RIO.Process
@@ -77,12 +77,12 @@ import           Stack.Types.Docker
                   )
 import           Stack.Types.DockerEntrypoint
                    ( DockerEntrypoint (..), DockerUser (..) )
-import           Stack.Types.Runner ( HasDockerEntrypointMVar (..), terminalL )
-import           Stack.Types.Version ( showStackVersion, withinRange )
-import           System.Environment
-                   ( getArgs, getEnv, getEnvironment, getExecutablePath
-                   , getProgName
+import           Stack.Types.Runner
+                   ( HasDockerEntrypointMVar (..), progNameL, terminalL
+                   , viewExecutablePath
                    )
+import           Stack.Types.Version ( showStackVersion, withinRange )
+import           System.Environment ( getArgs, getEnv, getEnvironment )
 import qualified System.FilePath as FP
 import           System.IO.Error ( isDoesNotExistError )
 import qualified System.Posix.User as User
@@ -126,18 +126,18 @@ getCmdArgs docker imageInfo isRemoteDocker = do
     case config.docker.stackExe of
         Just DockerStackExeHost
           | config.platform == dockerContainerPlatform -> do
-              exePath <- resolveFile' =<< liftIO getExecutablePath
+              exePath <- viewExecutablePath
               cmdArgs args exePath
           | otherwise -> throwIO UnsupportedStackExeHostPlatformException
         Just DockerStackExeImage -> do
-            progName <- liftIO getProgName
+            progName <- view progNameL
             pure (FP.takeBaseName progName, args, [], [])
         Just (DockerStackExePath path) -> cmdArgs args path
         Just DockerStackExeDownload -> exeDownload args
         Nothing
           | config.platform == dockerContainerPlatform -> do
               (exePath, exeTimestamp, misCompatible) <-
-                  do exePath <- resolveFile' =<< liftIO getExecutablePath
+                  do exePath <- viewExecutablePath
                      exeTimestamp <- getModificationTime exePath
                      isKnown <-
                          loadDockerImageExeCache
@@ -212,8 +212,6 @@ runContainerAndExit = do
   isStdoutTerminal <- view terminalL
   let dockerHost = lookup "DOCKER_HOST" env
       dockerCertPath = lookup "DOCKER_CERT_PATH" env
-      bamboo = lookup "bamboo_buildKey" env
-      jenkins = lookup "JENKINS_HOME" env
       msshAuthSock = lookup "SSH_AUTH_SOCK" env
       muserEnv = lookup "USER" env
       isRemoteDocker = maybe False (isPrefixOf "tcp://") dockerHost
@@ -242,15 +240,9 @@ runContainerAndExit = do
       platformVariant = show $ hashRepoName image
       stackRoot = view stackRootL config
       sandboxHomeDir = sandboxDir </> homeDirName
-      isTerm = not docker.detach &&
-               isStdinTerminal &&
-               isStdoutTerminal &&
-               isStderrTerminal
-      keepStdinOpen = not docker.detach &&
-                      -- Workaround for https://github.com/docker/docker/issues/12319
-                      -- This is fixed in Docker 1.9.1, but will leave the workaround
-                      -- in place for now, for users who haven't upgraded yet.
-                      (isTerm || (isNothing bamboo && isNothing jenkins))
+      isTerm = isStdinTerminal && isStdoutTerminal && isStderrTerminal
+      allocatePseudoTty = not docker.detach && isTerm
+      keepStdinOpen = not docker.detach
   let mpath = T.pack <$> lookupImageEnv "PATH" imageEnvVars
   when (isNothing mpath) $ do
     prettyWarnL
@@ -335,7 +327,7 @@ runContainerAndExit = do
         , case docker.containerName of
             Just name -> ["--name=" ++ name]
             Nothing -> []
-        , ["-t" | isTerm]
+        , ["-t" | allocatePseudoTty]
         , ["-i" | keepStdinOpen]
         , docker.runArgs
         , [image]
@@ -362,9 +354,10 @@ runContainerAndExit = do
     sshRelDir = relDirDotSsh
 
 -- | Inspect Docker image or container.
-inspect :: (HasProcessContext env, HasLogFunc env)
-        => String
-        -> RIO env (Maybe Inspect)
+inspect ::
+     (HasProcessContext env, HasLogFunc env)
+  => String
+  -> RIO env (Maybe Inspect)
 inspect image = do
   results <- inspects [image]
   case Map.toList results of
@@ -373,9 +366,10 @@ inspect image = do
     _ -> throwIO (InvalidInspectOutputException "expect a single result")
 
 -- | Inspect multiple Docker images and/or containers.
-inspects :: (HasProcessContext env, HasLogFunc env)
-         => [String]
-         -> RIO env (Map Text Inspect)
+inspects ::
+     (HasProcessContext env, HasLogFunc env)
+  => [String]
+  -> RIO env (Map Text Inspect)
 inspects [] = pure Map.empty
 inspects images = do
   maybeInspectOut <-
@@ -405,10 +399,11 @@ pull = do
   either throwIO (pullImage docker) docker.image
 
 -- | Pull Docker image from registry.
-pullImage :: (HasProcessContext env, HasTerm env)
-          => DockerOpts
-          -> String
-          -> RIO env ()
+pullImage ::
+     (HasProcessContext env, HasTerm env)
+  => DockerOpts
+  -> String
+  -> RIO env ()
 pullImage docker image = do
   prettyInfoL
     [ flow "Pulling image from registry:"

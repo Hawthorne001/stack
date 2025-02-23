@@ -58,16 +58,16 @@ import           Stack.Types.Build
                    , taskProvides
                    )
 import           Stack.Types.Build.Exception ( BuildPrettyException (..) )
-import           Stack.Types.BuildOpts ( BuildOpts (..), TestOpts (..)
-                   )
+import           Stack.Types.BuildOpts
+                   ( BenchmarkOpts (..), BuildOpts (..), TestOpts (..) )
 import           Stack.Types.BuildOptsCLI ( BuildOptsCLI (..) )
 import           Stack.Types.BuildOptsMonoid ( ProgressBarFormat (..) )
 import           Stack.Types.Compiler ( ActualCompiler (..) )
 import           Stack.Types.CompilerPaths ( HasCompiler (..), getGhcPkgExe )
-import           Stack.Types.Config
-                   ( Config (..), HasConfig (..), buildOptsL )
-import           Stack.Types.ConfigureOpts
-                   ( BaseConfigOpts (..) )
+import           Stack.Types.ComponentUtils
+                   ( StackUnqualCompName, unqualCompToString )
+import           Stack.Types.Config ( Config (..), HasConfig (..), buildOptsL )
+import           Stack.Types.ConfigureOpts ( BaseConfigOpts (..) )
 import           Stack.Types.DumpPackage ( DumpPackage (..) )
 import           Stack.Types.EnvConfig
                    ( HasEnvConfig (..), actualCompilerVersionL
@@ -85,10 +85,9 @@ import           Stack.Types.NamedComponent
 import           Stack.Types.Package
                    ( LocalPackage (..), Package (..), packageIdentifier )
 import           Stack.Types.Platform ( HasPlatform (..) )
-import           Stack.Types.Runner ( HasRunner, terminalL )
+import           Stack.Types.Runner ( terminalL, viewExecutablePath )
 import           Stack.Types.SourceMap ( Target )
 import qualified System.Directory as D
-import           System.Environment ( getExecutablePath )
 import qualified System.FilePath as FP
 
 -- | Fetch the packages necessary for a build, for example in combination with
@@ -110,7 +109,7 @@ preFetch plan
       TTRemotePackage _ _ pkgloc -> Set.singleton pkgloc
 
 -- | Print a description of build plan for human consumption.
-printPlan :: (HasRunner env, HasTerm env) => Plan -> RIO env ()
+printPlan :: HasEnvConfig env => Plan -> RIO env ()
 printPlan plan = do
   case Map.elems plan.unregisterLocal of
     [] -> prettyInfo $
@@ -137,24 +136,47 @@ printPlan plan = do
         <> bulletedList (map displayTask xs)
         <> line
 
+  buildOpts <- view buildOptsL
   let hasTests = not . Set.null . testComponents . taskComponents
       hasBenches = not . Set.null . benchComponents . taskComponents
       tests = Map.elems $ Map.filter hasTests plan.finals
       benches = Map.elems $ Map.filter hasBenches plan.finals
+      runTests = buildOpts.testOpts.runTests
+      runBenchmarks = buildOpts.benchmarkOpts.runBenchmarks
 
-  unless (null tests) $ do
-    prettyInfo $
-         flow "Would test:"
-      <> line
-      <> bulletedList (map displayTask tests)
-      <> line
+  unless (null tests) $
+    if runTests
+      then
+        prettyInfo $
+             flow "Would test:"
+          <> line
+          <> bulletedList (map displayTask tests)
+          <> line
+      else
+        prettyInfo $
+             fillSep
+               [ flow "Would not test, as running disabled by"
+               , style Shell "--no-run-tests"
+               , "flag."
+               ]
+          <> line
 
-  unless (null benches) $ do
-    prettyInfo $
-         flow "Would benchmark:"
-      <> line
-      <> bulletedList (map displayTask benches)
-      <> line
+  unless (null benches) $
+    if runBenchmarks
+      then
+        prettyInfo $
+             flow "Would benchmark:"
+          <> line
+          <> bulletedList (map displayTask benches)
+          <> line
+      else
+        prettyInfo $
+             fillSep
+               [ flow "Would not benchmark, as running disabled by"
+               , style Shell "--no-run-benchmarks"
+               , "flag."
+               ]
+          <> line
 
   case Map.toList plan.installExes of
     [] -> prettyInfo $
@@ -162,7 +184,7 @@ printPlan plan = do
             <> line
     xs -> do
       let executableMsg (name, loc) = fillSep $
-              fromString (T.unpack name)
+              fromString (unqualCompToString name)
             : "from"
             : ( case loc of
                   Snap -> "snapshot" :: StyleDoc
@@ -204,17 +226,21 @@ displayTask task = fillSep $
   missing = task.configOpts.missing
 
 -- | Perform the actual plan
-executePlan :: HasEnvConfig env
-            => BuildOptsCLI
-            -> BaseConfigOpts
-            -> [LocalPackage]
-            -> [DumpPackage] -- ^ global packages
-            -> [DumpPackage] -- ^ snapshot packages
-            -> [DumpPackage] -- ^ project packages and local extra-deps
-            -> InstalledMap
-            -> Map PackageName Target
-            -> Plan
-            -> RIO env ()
+executePlan ::
+     HasEnvConfig env
+  => BuildOptsCLI
+  -> BaseConfigOpts
+  -> [LocalPackage]
+  -> [DumpPackage]
+     -- ^ global packages
+  -> [DumpPackage]
+     -- ^ snapshot packages
+  -> [DumpPackage]
+     -- ^ project packages and local extra-deps
+  -> InstalledMap
+  -> Map PackageName Target
+  -> Plan
+  -> RIO env ()
 executePlan
     boptsCli
     baseConfigOpts
@@ -259,9 +285,9 @@ executePlan
     Map.keysSet plan.tasks <> Map.keysSet plan.finals
 
 copyExecutables ::
-       HasEnvConfig env
-    => Map Text InstallLocation
-    -> RIO env ()
+     HasEnvConfig env
+  => Map StackUnqualCompName InstallLocation
+  -> RIO env ()
 copyExecutables exes | Map.null exes = pure ()
 copyExecutables exes = do
   snapBin <- (</> bindirSuffix) <$> installationRootDeps
@@ -280,26 +306,28 @@ copyExecutables exes = do
           Platform _ Windows -> ".exe"
           _ -> ""
 
-  currExe <- liftIO getExecutablePath -- needed for windows, see below
+  -- needed for windows, see below
+  currExe <- toFilePath <$> viewExecutablePath
 
   installed <- forMaybeM (Map.toList exes) $ \(name, loc) -> do
-    let bindir =
+    let strName = unqualCompToString name
+        bindir =
             case loc of
                 Snap -> snapBin
                 Local -> localBin
-    mfp <- forgivingResolveFile bindir (T.unpack name ++ ext)
+    mfp <- forgivingResolveFile bindir (strName ++ ext)
       >>= rejectMissingFile
     case mfp of
       Nothing -> do
         prettyWarnL
           [ flow "Couldn't find executable"
-          , style Current (fromString $ T.unpack name)
+          , style Current (fromString strName)
           , flow "in directory"
           , pretty bindir <> "."
           ]
         pure Nothing
       Just file -> do
-        let destFile = destDir' FP.</> T.unpack name ++ ext
+        let destFile = destDir' FP.</> strName ++ ext
         prettyInfoL
           [ flow "Copying from"
           , pretty file
@@ -311,7 +339,7 @@ copyExecutables exes = do
           Platform _ Windows | FP.equalFilePath destFile currExe ->
               windowsRenameCopy (toFilePath file) destFile
           _ -> D.copyFile (toFilePath file) destFile
-        pure $ Just (name <> T.pack ext)
+        pure $ Just (strName ++ ext)
 
   unless (null installed) $ do
     prettyInfo $
@@ -321,7 +349,7 @@ copyExecutables exes = do
            ]
       <> line
       <> bulletedList
-           (map (fromString . T.unpack . textDisplay) installed :: [StyleDoc])
+           (map fromString installed :: [StyleDoc])
   unless compilerSpecific $ warnInstallSearchPathIssues destDir' installed
 
 -- | Windows can't write over the current executable. Instead, we rename the
@@ -336,15 +364,26 @@ windowsRenameCopy src dest = do
   old = dest ++ ".old"
 
 -- | Perform the actual plan (internal)
-executePlan' :: HasEnvConfig env
-             => InstalledMap
-             -> Map PackageName Target
-             -> Plan
-             -> ExecuteEnv
-             -> RIO env ()
+executePlan' ::
+     HasEnvConfig env
+  => InstalledMap
+  -> Map PackageName Target
+  -> Plan
+  -> ExecuteEnv
+  -> RIO env ()
 executePlan' installedMap0 targets plan ee = do
+  config <- view configL
   let !buildOpts = ee.buildOpts
-  let !testOpts = buildOpts.testOpts
+      !testOpts = buildOpts.testOpts
+      !benchmarkOpts = buildOpts.benchmarkOpts
+      runTests = testOpts.runTests
+      runBenchmarks = benchmarkOpts.runBenchmarks
+      noNotifyIfNoRunTests = not config.notifyIfNoRunTests
+      noNotifyIfNoRunBenchmarks = not config.notifyIfNoRunBenchmarks
+      hasTests = not . Set.null . testComponents . taskComponents
+      hasBenches = not . Set.null . benchComponents . taskComponents
+      tests = Map.elems $ Map.filter hasTests plan.finals
+      benches = Map.elems $ Map.filter hasBenches plan.finals
   when testOpts.coverage deleteHpcReports
   cv <- view actualCompilerVersionL
   whenJust (nonEmpty $ Map.toList plan.unregisterLocal) $ \ids -> do
@@ -376,6 +415,24 @@ executePlan' installedMap0 targets plan ee = do
         buildOpts.keepGoing
   terminal <- view terminalL
   terminalWidth <- view termWidthL
+  unless (noNotifyIfNoRunTests || runTests || null tests) $
+    prettyInfo $
+      fillSep
+        [ flow "All test running disabled by"
+        , style Shell "--no-run-tests"
+        , flow "flag. To mute this message in future, set"
+        , style Shell (flow "notify-if-no-run-tests: false")
+        , flow "in Stack's configuration."
+        ]
+  unless (noNotifyIfNoRunBenchmarks || runBenchmarks || null benches) $
+    prettyInfo $
+      fillSep
+        [ flow "All benchmark running disabled by"
+        , style Shell "--no-run-benchmarks"
+        , flow "flag. To mute this message in future, set"
+        , style Shell (flow "notify-if-no-run-benchmarks: false")
+        , flow "in Stack's configuration."
+        ]
   errs <- liftIO $ runActions threads keepGoing actions $
     \doneVar actionsVar -> do
       let total = length actions
@@ -504,13 +561,14 @@ unregisterPackages cv localDB ids = do
 
     _ -> for_ ids . unregisterSinglePkg $ \ident _gid -> Left ident
 
-toActions :: HasEnvConfig env
-          => InstalledMap
-          -> Maybe (MVar ())
-          -> (RIO env () -> IO ())
-          -> ExecuteEnv
-          -> (Maybe Task, Maybe Task) -- build and final
-          -> [Action]
+toActions ::
+     HasEnvConfig env
+  => InstalledMap
+  -> Maybe (MVar ())
+  -> (RIO env () -> IO ())
+  -> ExecuteEnv
+  -> (Maybe Task, Maybe Task) -- build and final
+  -> [Action]
 toActions installedMap mtestLock runInBase ee (mbuild, mfinal) =
   abuild ++ afinal
  where
@@ -540,8 +598,9 @@ toActions installedMap mtestLock runInBase ee (mbuild, mfinal) =
             , concurrency = ConcurrencyAllowed
             }
       ) $
-      -- These are the "final" actions - running tests and benchmarks.
-      ( if Set.null tests
+      -- These are the "final" actions - running test suites and benchmarks,
+      -- unless --no-run-tests or --no-run-benchmarks is enabled.
+      ( if Set.null tests || not runTests
           then id
           else (:) Action
             { actionId = ActionId pkgId ATRunTests
@@ -554,7 +613,7 @@ toActions installedMap mtestLock runInBase ee (mbuild, mfinal) =
             , concurrency = ConcurrencyAllowed
             }
       ) $
-      ( if Set.null benches
+      ( if Set.null benches || not runBenchmarks
           then id
           else (:) Action
             { actionId = ActionId pkgId ATRunBenchmarks
@@ -591,6 +650,8 @@ toActions installedMap mtestLock runInBase ee (mbuild, mfinal) =
   bopts = ee.buildOpts
   topts = bopts.testOpts
   beopts = bopts.benchmarkOpts
+  runTests = topts.runTests
+  runBenchmarks = beopts.runBenchmarks
 
 taskComponents :: Task -> Set NamedComponent
 taskComponents task =

@@ -80,6 +80,7 @@ import           Stack.Prelude
 import           Stack.Types.BuildConfig
                    ( BuildConfig (..), HasBuildConfig (..) )
 import           Stack.Types.BuildOptsCLI ( BuildOptsCLI (..) )
+import           Stack.Types.ComponentUtils ( unqualCompFromText )
 import           Stack.Types.Config ( Config (..) )
 import           Stack.Types.NamedComponent
                    ( NamedComponent (..), renderComponent )
@@ -147,11 +148,12 @@ data RawTarget
   deriving (Eq, Show)
 
 -- | Same as @parseRawTarget@, but also takes directories into account.
-parseRawTargetDirs :: MonadIO m
-                   => Path Abs Dir -- ^ current directory
-                   -> Map PackageName ProjectPackage
-                   -> RawInput -- ^ raw target information from the commandline
-                   -> m (Either StyleDoc [(RawInput, RawTarget)])
+parseRawTargetDirs ::
+     MonadIO m
+  => Path Abs Dir -- ^ current directory
+  -> Map PackageName ProjectPackage
+  -> RawInput -- ^ raw target information from the commandline
+  -> m (Either StyleDoc [(RawInput, RawTarget)])
 parseRawTargetDirs root locals ri =
   case parseRawTarget t of
     Just rt -> pure $ Right [(ri, rt)]
@@ -226,9 +228,9 @@ parseRawTarget t =
 
   parseCompType t' =
     case t' of
-      "exe" -> Just CExe
-      "test" -> Just CTest
-      "bench" -> Just CBench
+      "exe" -> Just (CExe . unqualCompFromText)
+      "test" -> Just (CTest . unqualCompFromText)
+      "bench" -> Just (CBench . unqualCompFromText)
       _ -> Nothing
 
 --------------------------------------------------------------------------------
@@ -263,11 +265,14 @@ resolveRawTarget sma allLocs (rawInput, rt) =
   -- 'ComponentName'
   isCompNamed :: ComponentName -> NamedComponent -> Bool
   isCompNamed _ CLib = False
-  isCompNamed t1 (CSubLib t2) = t1 == t2
-  isCompNamed t1 (CExe t2) = t1 == t2
-  isCompNamed t1 (CFlib t2) = t1 == t2
-  isCompNamed t1 (CTest t2) = t1 == t2
-  isCompNamed t1 (CBench t2) = t1 == t2
+  isCompNamed t1 t2 = case t2 of
+    (CSubLib t2') -> t1' == t2'
+    (CExe t2') -> t1' == t2'
+    (CFlib t2') -> t1' == t2'
+    (CTest t2') -> t1' == t2'
+    (CBench t2') -> t1' == t2'
+   where
+    t1' = unqualCompFromText t1
 
   go (RTComponent cname) = do
     -- Associated list from component name to package that defines it. We use an

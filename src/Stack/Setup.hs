@@ -44,6 +44,7 @@ import           Data.Conduit.Lazy ( lazyConsume )
 import qualified Data.Conduit.List as CL
 import           Data.Conduit.Process.Typed ( createSource )
 import           Data.Conduit.Zlib ( ungzip )
+import qualified Data.Either.Extra as EE
 import           Data.List.Split ( splitOn )
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -123,7 +124,7 @@ import           Stack.SourceMap
 import           Stack.Storage.User ( loadCompilerPaths, saveCompilerPaths )
 import           Stack.Types.Build.Exception ( BuildPrettyException (..) )
 import           Stack.Types.BuildConfig
-                   ( BuildConfig (..), HasBuildConfig (..), projectRootL
+                   ( BuildConfig (..), HasBuildConfig (..), configFileRootL
                    , wantedCompilerVersionL
                    )
 import           Stack.Types.BuildOptsCLI ( BuildOptsCLI (..) )
@@ -162,7 +163,10 @@ import           Stack.Types.GlobalOpts ( GlobalOpts (..) )
 import           Stack.Types.Platform
                    ( HasPlatform (..), PlatformVariant (..)
                    , platformOnlyRelDir )
-import           Stack.Types.Runner ( HasRunner (..), Runner (..) )
+import           Stack.Types.Runner
+                   ( HasRunner (..), Runner (..), mExecutablePathL
+                   , viewExecutablePath
+                   )
 import           Stack.Types.SetupInfo ( SetupInfo (..) )
 import           Stack.Types.SourceMap
                    ( SMActual (..), SMWanted (..), SourceMap (..) )
@@ -172,7 +176,7 @@ import           Stack.Types.VersionedDownloadInfo
                    ( VersionedDownloadInfo (..) )
 import           Stack.Types.WantedCompilerSetter ( WantedCompilerSetter (..) )
 import qualified System.Directory as D
-import           System.Environment ( getExecutablePath, lookupEnv )
+import           System.Environment ( lookupEnv )
 import           System.IO.Error ( isPermissionError )
 import           System.FilePath ( searchPathSeparator )
 import qualified System.FilePath as FP
@@ -616,13 +620,15 @@ defaultSetupInfoYaml =
   "https://raw.githubusercontent.com/commercialhaskell/stackage-content/master/stack/stack-setup-2.yaml"
 
 data SetupOpts = SetupOpts
-  { installIfMissing :: !Bool
+  { installGhcIfMissing :: !Bool
+  , installMsysIfMissing :: !Bool
   , useSystem :: !Bool
     -- ^ Should we use a system compiler installation, if available?
   , wantedCompiler :: !WantedCompiler
   , compilerCheck :: !VersionCheck
-  , stackYaml :: !(Maybe (Path Abs File))
-    -- ^ If we got the desired GHC version from that file
+  , configFile :: !(Maybe (Path Abs File))
+    -- ^ If we got the desired GHC version from that configuration file, which
+    -- may be either a user-specific global or a project-level one.
   , forceReinstall :: !Bool
   , sanityCheck :: !Bool
     -- ^ Run a sanity check on the selected GHC
@@ -648,17 +654,20 @@ setupEnv ::
 setupEnv needTargets buildOptsCLI mResolveMissingGHC = do
   config <- view configL
   bc <- view buildConfigL
-  let stackYaml = bc.stackYaml
+  -- We are indifferent as to whether the configuration file is a
+  -- user-specific global or a project-level one.
+  let eitherConfigFile = EE.fromEither bc.configFile
   platform <- view platformL
   wcVersion <- view wantedCompilerVersionL
   actual <- either throwIO pure $ wantedToActual wcVersion
   let wc = actual^.whichCompilerL
       sopts = SetupOpts
-        { installIfMissing = config.installGHC
+        { installGhcIfMissing = config.installGHC
+        , installMsysIfMissing = config.installMsys
         , useSystem = config.systemGHC
         , wantedCompiler = wcVersion
         , compilerCheck = config.compilerCheck
-        , stackYaml = Just stackYaml
+        , configFile = Just eitherConfigFile
         , forceReinstall = False
         , sanityCheck = False
         , skipGhcCheck = config.skipGHCCheck
@@ -722,7 +731,7 @@ setupEnv needTargets buildOptsCLI mResolveMissingGHC = do
 
   distDir <- runReaderT distRelativeDir envConfig0 >>= canonicalizePath
 
-  executablePath <- liftIO getExecutablePath
+  mExecutablePath <- view mExecutablePathL
 
   utf8EnvVars <- withProcessContext menv $ getUtf8EnvVars compilerVer
 
@@ -747,7 +756,16 @@ setupEnv needTargets buildOptsCLI mResolveMissingGHC = do
                    else id)
 
               $ (if es.stackExe
-                   then Map.insert "STACK_EXE" (T.pack executablePath)
+                   then maybe
+                     -- We don't throw an exception if there is no Stack
+                     -- executable path, so that buildConfigCompleter does not
+                     -- need to specify a path.
+                     id
+                     ( \executablePath -> Map.insert
+                         "STACK_EXE"
+                         (T.pack $ toFilePath executablePath)
+                     )
+                     mExecutablePath
                    else id)
 
               $ (if es.localeUtf8
@@ -1034,9 +1052,9 @@ warnUnsupportedCompiler ghcVersion = do
           , style Url "https://github.com/commercialhaskell/stack/issues/648" <> "."
           ]
         pure True
-    | ghcVersion >= mkVersion [9, 9] && notifyIfGhcUntested -> do
+    | ghcVersion >= mkVersion [9, 11] && notifyIfGhcUntested -> do
         prettyWarnL
-          [ flow "Stack has not been tested with GHC versions 9.10 and above, \
+          [ flow "Stack has not been tested with GHC versions 9.12 and above, \
                  \and using"
           , fromString (versionString ghcVersion) <> ","
           , flow "this may fail."
@@ -1078,9 +1096,9 @@ warnUnsupportedCompilerCabal cp didWarn = do
           , parens (style Shell "nightly-2018-03-13")
           , flow "or later specify such GHC versions."
           ]
-    | cabalVersion >= mkVersion [3, 11] && notifyIfCabalUntested ->
+    | cabalVersion >= mkVersion [3, 13] && notifyIfCabalUntested ->
         prettyWarnL
-          [ flow "Stack has not been tested with Cabal versions 3.12 and \
+          [ flow "Stack has not been tested with Cabal versions 3.14 and \
                  \above, but version"
           , fromString (versionString cabalVersion)
           , flow "was found, this may fail."
@@ -1104,7 +1122,7 @@ ensureMsys sopts getSetupInfo' = do
       case getInstalledTool installed (mkPackageName "msys2") (const True) of
         Just tool -> pure (Just tool)
         Nothing
-          | sopts.installIfMissing -> do
+          | sopts.installMsysIfMissing -> do
               si <- runMemoized getSetupInfo'
               let msysDir = fillSep
                     [ style Dir "msys2-yyyymmdd"
@@ -1162,14 +1180,14 @@ installGhcBindist sopts getSetupInfo' installed = do
       wantedCompilerSetter
         | isJust globalOpts.compiler = CompilerAtCommandLine
         | isJust globalOpts.snapshot = SnapshotAtCommandLine
-        | otherwise = YamlConfiguration sopts.stackYaml
+        | otherwise = YamlConfiguration sopts.configFile
   logDebug $
        "Found already installed GHC builds: "
     <> mconcat (intersperse ", " (map (fromString . compilerBuildName . snd) existingCompilers))
   case existingCompilers of
     (tool, build_):_ -> pure (tool, build_)
     []
-      | sopts.installIfMissing -> do
+      | sopts.installGhcIfMissing -> do
           si <- runMemoized getSetupInfo'
           downloadAndInstallPossibleCompilers
             (map snd possibleCompilers)
@@ -1678,6 +1696,10 @@ getGhcBuilds = do
     Just ghcBuild -> pure [ghcBuild]
     Nothing -> determineGhcBuild
  where
+  -- The GHCup project is also interested in the algorithm below, as it copies
+  -- it at GHCup.Platform.getStackGhcBuilds. If you change this algorithm, it
+  -- would be a courtesy to bring that to the attention of the GHCup project
+  -- maintainers.
   determineGhcBuild = do
     -- TODO: a more reliable, flexible, and data driven approach would be to
     -- actually download small "test" executables (from setup-info) that link to
@@ -2179,8 +2201,8 @@ downloadOrUseLocal downloadLabel downloadInfo destination =
       pure path
     (parseRelFile -> Just path) -> do
       warnOnIgnoredChecks
-      root <- view projectRootL
-      pure (root </> path)
+      configFileRoot <- view configFileRootL
+      pure (configFileRoot </> path)
     _ -> prettyThrowIO $ URLInvalid url
  where
   url = T.unpack downloadInfo.url
@@ -2944,10 +2966,10 @@ downloadStackExe platforms0 archiveInfo destDir checkPath testExe = do
 
   prettyInfoS "Download complete, testing executable."
 
-  -- We need to call getExecutablePath before we overwrite the
-  -- currently running binary: after that, Linux will append
-  -- (deleted) to the filename.
-  currExe <- liftIO getExecutablePath >>= parseAbsFile
+  -- We need to preserve the name of the executable file before we overwrite the
+  -- currently running binary: after that, Linux will append (deleted) to the
+  -- filename.
+  currExe <- viewExecutablePath
 
   liftIO $ do
     setFileExecutable (toFilePath tmpFile)

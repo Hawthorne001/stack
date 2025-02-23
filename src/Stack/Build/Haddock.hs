@@ -273,7 +273,7 @@ generateHaddockIndex descr bco dumpPackages docRelFP destDir = do
         compInterfaceDirsAndFiles <- do
           -- It is possible that the *.haddock file specified by the
           -- haddock-interfaces key for an installed package may not exist. For
-          -- example, with GHC 9.6.5 on Windows, there is no
+          -- example, with GHC 9.6.6 on Windows, there is no
           --
           -- ${pkgroot}/../doc/html/libraries/rts-1.0.2\rts.haddock
           (srcInterfaceSubDirs, _) <- doesDirExist srcInterfaceDir >>= \case
@@ -371,9 +371,10 @@ generateHaddockIndex descr bco dumpPackages docRelFP destDir = do
     destHtmlAbsDir = parent opts.destInterfaceFile
 
 -- | Find first DumpPackage matching the GhcPkgId
-lookupDumpPackage :: GhcPkgId
-                  -> [Map GhcPkgId DumpPackage]
-                  -> Maybe DumpPackage
+lookupDumpPackage ::
+     GhcPkgId
+  -> [Map GhcPkgId DumpPackage]
+  -> Maybe DumpPackage
 lookupDumpPackage ghcPkgId dumpPkgs =
   listToMaybe $ mapMaybe (Map.lookup ghcPkgId) dumpPkgs
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ApplicativeDo       #-}
 {-# LANGUAGE OverloadedStrings   #-}
 
 -- | Function to parse command line arguments for Stack's @ls@ command.
@@ -19,16 +20,16 @@ import           Stack.Ls
                    , LsView (..), SnapshotOpts (..), ListGlobalsOpts
                    )
 import           Stack.Options.DotParser ( dotOptsParser )
-import           Stack.Prelude
+import           Stack.Prelude hiding ( sep )
 
 -- | Parse command line arguments for Stack's @ls@ command.
 lsOptsParser :: OA.Parser LsCmdOpts
 lsOptsParser = LsCmdOpts
-  <$> OA.hsubparser 
-        (  lsSnapCmd 
-        <> lsGlobalsCmd 
-        <> lsDepsCmd 
-        <> lsStylesCmd 
+  <$> OA.hsubparser
+        (  lsSnapCmd
+        <> lsGlobalsCmd
+        <> lsDepsCmd
+        <> lsStylesCmd
         <> lsToolsCmd
         )
 
@@ -47,7 +48,10 @@ lsGlobalsCmd = OA.command "globals" $
 lsDepsCmd :: OA.Mod OA.CommandFields LsCmds
 lsDepsCmd = OA.command "dependencies" $
   OA.info lsDepOptsParser $
-       OA.progDesc "View the dependencies."
+       OA.progDesc
+         "View the packages versions used for a project. Use a command if the \
+         \first target specified has the name of a command. Targets other than \
+         \project packages are ignored."
     <> OA.footer globalFooter
 
 lsStylesCmd :: OA.Mod OA.CommandFields LsCmds
@@ -157,8 +161,7 @@ formatSubCommand ::
   -> OA.Mod OA.CommandFields ListDepsOpts
 formatSubCommand cmd desc formatParser =
   OA.command
-    cmd
-    (OA.info (toListDepsOptsParser formatParser) (OA.progDesc desc))
+    cmd (OA.info (toListDepsOptsParser formatParser) (OA.progDesc desc))
 
 listDepsTextParser :: OA.Parser ListDepsFormat
 listDepsTextParser =
@@ -191,9 +194,13 @@ listDepsJsonParser :: OA.Parser ListDepsFormat
 listDepsJsonParser = pure ListDepsJSON
 
 listDepsFormatOptsParser :: OA.Parser ListDepsFormatOpts
-listDepsFormatOptsParser = ListDepsFormatOpts
-  <$> separatorParser
-  <*> licenseParser
+listDepsFormatOptsParser = do
+  license <- licenseParser
+  sep <- separatorParser
+  pure ListDepsFormatOpts
+    { sep
+    , license
+    }
 
 separatorParser :: OA.Parser Text
 separatorParser = fmap
@@ -201,7 +208,7 @@ separatorParser = fmap
   ( textOption
       (  OA.long "separator"
       <> OA.metavar "SEP"
-      <> OA.help "Separator between package name and package version."
+      <> OA.help "Separator between package name and what follows."
       <> OA.value " "
       <> OA.showDefault
       )

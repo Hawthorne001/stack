@@ -12,12 +12,13 @@ module Stack.SetupCmd
   , setup
   ) where
 
+import qualified Data.Either.Extra as EE
 import           Stack.Prelude
 import           Stack.Runners
                    ( ShouldReexec (..), withBuildConfig, withConfig )
 import           Stack.Setup ( SetupOpts (..), ensureCompilerAndMsys )
 import           Stack.Types.BuildConfig
-                   ( HasBuildConfig, stackYamlL, wantedCompilerVersionL )
+                   ( HasBuildConfig, configFileL, wantedCompilerVersionL )
 import           Stack.Types.CompilerPaths ( CompilerPaths (..) )
 import           Stack.Types.Config ( Config (..), HasConfig (..) )
 import           Stack.Types.GHCVariant ( HasGHCVariant )
@@ -37,25 +38,50 @@ data SetupCmdOpts = SetupCmdOpts
 setupCmd :: SetupCmdOpts -> RIO Runner ()
 setupCmd sco = withConfig YesReexec $ do
   installGHC <- view $ configL . to (.installGHC)
-  if installGHC
-    then
-       withBuildConfig $ do
-       (wantedCompiler, compilerCheck, mstack) <-
-         case sco.compilerVersion of
-           Just v -> pure (v, MatchMinor, Nothing)
-           Nothing -> (,,)
-             <$> view wantedCompilerVersionL
-             <*> view (configL . to (.compilerCheck))
-             <*> (Just <$> view stackYamlL)
-       setup sco wantedCompiler compilerCheck mstack
-    else
-      prettyWarnL
-        [ "The"
-        , style Shell "--no-install-ghc"
-        , flow "flag is inconsistent with"
-        , style Shell (flow "stack setup") <> "."
-        , flow "No action taken."
-        ]
+  installMsys <- view $ configL . to (.installMsys)
+  case (installGHC, installMsys) of
+    (True, True) -> withBuildConfig $ do
+      (wantedCompiler, compilerCheck, mConfigFile) <-
+        case sco.compilerVersion of
+          Just v -> pure (v, MatchMinor, Nothing)
+          Nothing -> do
+           wantedCompilerVersion <- view wantedCompilerVersionL
+           compilerCheck <- view (configL . to (.compilerCheck))
+           configFile <- view configFileL
+           -- We are indifferent as to whether the configuration file is a
+           -- user-specific global or a project-level one.
+           let eitherConfigFile = EE.fromEither configFile
+           pure
+             ( wantedCompilerVersion
+             , compilerCheck
+             , Just eitherConfigFile
+             )
+      setup sco wantedCompiler compilerCheck mConfigFile
+    (False, True) -> warn
+      [ styledNoInstallGHC
+      , singleFlag
+      ]
+    (True, False) -> warn
+      [ styledNoInstallMsys
+      , singleFlag
+      ]
+    (False, False) -> warn
+      [ styledNoInstallGHC
+      , "and"
+      , styledNoInstallMsys
+      , flow "flags are"
+      ]
+ where
+  styledNoInstallGHC = style Shell "--no-install-ghc"
+  styledNoInstallMsys = style Shell "--no-install-msys"
+  singleFlag = flow "flag is"
+  warn docs = prettyWarnL $
+       ["The"]
+    <> docs
+    <> [ flow "inconsistent with"
+       , style Shell (flow "stack setup") <> "."
+       , flow "No action taken."
+       ]
 
 setup ::
      (HasBuildConfig env, HasGHCVariant env)
@@ -63,15 +89,18 @@ setup ::
   -> WantedCompiler
   -> VersionCheck
   -> Maybe (Path Abs File)
+     -- ^ If we got the desired GHC version from that configuration file, which
+     -- may be either a user-specific global or a project-level one.
   -> RIO env ()
-setup sco wantedCompiler compilerCheck stackYaml = do
+setup sco wantedCompiler compilerCheck configFile = do
   config <- view configL
   sandboxedGhc <- (.sandboxed) . fst <$> ensureCompilerAndMsys SetupOpts
-    { installIfMissing = True
+    { installGhcIfMissing = True
+    , installMsysIfMissing = True
     , useSystem = config.systemGHC && not sco.forceReinstall
     , wantedCompiler
     , compilerCheck
-    , stackYaml
+    , configFile
     , forceReinstall = sco.forceReinstall
     , sanityCheck = True
     , skipGhcCheck = False
