@@ -1,0 +1,50 @@
+spec-version: 0.36.0
+
+name: myPackageA
+
+dependencies:
+- base
+
+library:
+  source-dirs: src
+  dependencies:
+  - cyclic
+
+executables:
+  multi-test-suite-exe:
+    source-dirs: app
+    main: Main.hs
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - myPackageA
+
+tests:
+  multi-test-suite-test:
+    source-dirs: test
+    main: Spec.hs
+    other-modules: []
+    dependencies:
+    - myPackageA
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+  multi-test-suite-test-2:
+    source-dirs: test-2
+    main: Spec.hs
+    dependencies:
+    - myPackageA
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+  multi-test-suite-test-3:
+    source-dirs: test-3
+    main: Spec.hs
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
