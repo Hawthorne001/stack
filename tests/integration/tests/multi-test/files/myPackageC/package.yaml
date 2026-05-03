@@ -1,0 +1,24 @@
+spec-version: 0.36.0
+
+name: myPackageC
+
+dependencies:
+- base
+
+executables:
+  sub-package-exe:
+    source-dirs: src
+    main: main.hs
+
+tests:
+  sub-package-test:
+    source-dirs:
+    - src
+    - test
+    main: Spec.hs
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - myPackageA
