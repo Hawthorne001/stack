@@ -1,6 +1,7 @@
 spec-version: 0.36.0
 
-name: cyclic
+# Only builds if this package name comes before myPackageA, alphabetically!
+name: 0myPackageB
 
 dependencies:
 - base
