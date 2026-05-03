@@ -1,4 +1,4 @@
-name:                multi-test-suite
+name:                myPackageA
 version:             0.1.0.0
 build-type:          Simple
 cabal-version:       >=1.10
@@ -14,7 +14,7 @@ executable multi-test-suite-exe
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , multi-test-suite
+                     , myPackageA
   default-language:    Haskell2010
 
 test-suite multi-test-suite-test
@@ -22,7 +22,7 @@ test-suite multi-test-suite-test
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
-                     , multi-test-suite
+                     , myPackageA
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
@@ -31,7 +31,7 @@ test-suite multi-test-suite-test-2
   hs-source-dirs:      test-2
   main-is:             Spec.hs
   build-depends:       base
-                     , multi-test-suite
+                     , myPackageA
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

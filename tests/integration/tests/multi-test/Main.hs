@@ -7,7 +7,7 @@ main = do
     -- FIXME: Make 'clean' unnecessary (see #1411)
     stack ["clean"]
     stackCheckStderr ["test", "--coverage"] $ \out -> do
-        unless ("The coverage report for multi-test-suite's test-suite multi-test-suite-test is available at" `isInfixOf` out) $
+        unless ("The coverage report for myPackageA's test-suite multi-test-suite-test is available at" `isInfixOf` out) $
             fail "Didn't get expected report for multi-test-suite-test"
         unless ("[S-6829]" `isInfixOf` out) $
             fail "Didn't get expected empty report for multi-test-suite-test-2"
