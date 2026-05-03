@@ -2,4 +2,4 @@ snapshot: lts-24.37
 packages:
 - .
 - myPackageC
-- cyclic
+- myPackageB
