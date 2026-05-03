@@ -1,5 +1,5 @@
 snapshot: lts-24.37
 packages:
 - .
-- sub-package
+- myPackageC
 - cyclic
