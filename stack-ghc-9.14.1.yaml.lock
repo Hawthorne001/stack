@@ -52,7 +52,14 @@ packages:
       sha256: 4e67cbe25b355b6af68aee79c36b0f3c78428dbdd1be4298f4afaf000f3bc9a9
       size: 819
   original:
-    hackage: http-api-data-0.7
+    hackage: http-api-data-0.7@sha256:b8145755fced98db1ac67f4f98c8010cd5f82c121a82b65addea2556b5fbd6d5,3157
+- completed:
+    hackage: hpack-0.39.5@sha256:c214f49ed3df75ce75201709927fa27e08f642023ed4b4ca8cc43604e5199ced,5263
+    pantry-tree:
+      sha256: 75fe87db5a37bf3941e29e2273f530ee7b2932d64bf813b55151a889e97305ca
+      size: 3799
+  original:
+    hackage: hpack-0.39.5@sha256:c214f49ed3df75ce75201709927fa27e08f642023ed4b4ca8cc43604e5199ced,5263
 - completed:
     hackage: rio-prettyprint-0.1.9.0@sha256:f48afbfe28ed7be4d1a1bb96705669593dd5df12f28ed908516c6dfc4e0becbb,1375
     pantry-tree:
@@ -66,7 +73,7 @@ packages:
       sha256: 5ba1ff7ad9a676b89a2a6ab00ac2100f30a21440ef8e04094614ab5b5f494b3f
       size: 438
   original:
-    hackage: tagged-0.8.10
+    hackage: tagged-0.8.10@sha256:e9b97c98e9827981d62f37c5febf9e6bbb67acec92b8bd41fd9f7ace5eb31d32,2201
 - completed:
     hackage: tls-2.2.2@sha256:95f5acd4ce76cbd6bdc46b737370dcbd93c59cf1cd1934a30e55c61c1dc140e9,7283
     pantry-tree:

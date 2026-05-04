@@ -47,6 +47,13 @@ packages:
   original:
     hackage: crypton-x509-validation-1.8.0@sha256:63acb2df06f28c3ffdddaf6d9402105b9026796036aa10d7347ae4f7db51c36b,2018
 - completed:
+    hackage: hpack-0.39.5@sha256:c214f49ed3df75ce75201709927fa27e08f642023ed4b4ca8cc43604e5199ced,5263
+    pantry-tree:
+      sha256: 75fe87db5a37bf3941e29e2273f530ee7b2932d64bf813b55151a889e97305ca
+      size: 3799
+  original:
+    hackage: hpack-0.39.5@sha256:c214f49ed3df75ce75201709927fa27e08f642023ed4b4ca8cc43604e5199ced,5263
+- completed:
     hackage: rio-prettyprint-0.1.9.0@sha256:f48afbfe28ed7be4d1a1bb96705669593dd5df12f28ed908516c6dfc4e0becbb,1375
     pantry-tree:
       sha256: c840f1193718b7af6c004fc62a67919e223b56cc1658a168c8e490e53a632aa0

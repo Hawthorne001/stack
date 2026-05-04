@@ -17,6 +17,8 @@ extra-deps:
 - crypton-x509-validation-1.8.0@sha256:63acb2df06f28c3ffdddaf6d9402105b9026796036aa10d7347ae4f7db51c36b,2018
 # nightly-2026-04-17 specifies http-api-data-0.6.7
 - http-api-data-0.7@sha256:b8145755fced98db1ac67f4f98c8010cd5f82c121a82b65addea2556b5fbd6d5,3157
+# nightly-2026-04-17 specifies hpack-0.39.3
+- hpack-0.39.5@sha256:c214f49ed3df75ce75201709927fa27e08f642023ed4b4ca8cc43604e5199ced,5263
 # nightly-2026-04-17 specifies rio-prettyprint-0.1.8.0
 - rio-prettyprint-0.1.9.0@sha256:f48afbfe28ed7be4d1a1bb96705669593dd5df12f28ed908516c6dfc4e0becbb,1375
 # nightly-2026-04-17 specifies tagged-0.8.9
