@@ -1,4 +1,4 @@
-module Files where
+module Lib where
 
 import System.FilePath.Glob
 

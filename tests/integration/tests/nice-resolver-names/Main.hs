@@ -1,10 +1,14 @@
+-- | Stack's init command uses a convenience synonym for the snapshot in the
+-- project-level configuration file, if that is what was specified at the
+-- command line.
+
 {-# LANGUAGE OverloadedStrings #-}
 
-import StackTest
-import Control.Exception (throwIO)
-import Data.Maybe (mapMaybe)
-import Data.Foldable (for_)
-import Data.List (stripPrefix)
+import           Control.Exception ( throwIO )
+import           Data.Maybe ( mapMaybe )
+import           Data.Foldable ( for_ )
+import           Data.List ( stripPrefix )
+import           StackTest
 
 main :: IO ()
 main = do

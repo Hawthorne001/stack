@@ -1,5 +1,7 @@
+name: mySnapshot
+
 snapshot: ghc-9.10.3
-name: snapshot
+
 packages:
 - acme-missiles-0.3@rev:0
 - stm-2.5.0.0@rev:0

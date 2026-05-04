@@ -1,7 +1,10 @@
-import StackTest
-import Control.Monad (unless)
+-- | Stack can override the compiler specified in a snapshot.
+
+import           Control.Monad ( unless )
+import           StackTest
 
 main :: IO ()
 main = stackCheckStdout ["exec", "--", "ghc", "--numeric-version"] $ \ver ->
   -- get rid of the newline character
-  unless (concat (lines ver) == "9.10.3") $ error $ "Invalid version: " ++ show ver
+  unless (concat (lines ver) == "9.10.3") $
+    error $ "Invalid version: " ++ show ver

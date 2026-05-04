@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import Lib ( func )
 
-main = do
-  putStrLn $ "Sample strings: " ++ show someStrings
+main :: IO ()
+main = func
