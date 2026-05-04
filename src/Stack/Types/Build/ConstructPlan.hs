@@ -15,6 +15,7 @@ module Stack.Types.Build.ConstructPlan
   , CombinedMap
   , M
   , W (..)
+  , LibraryMap
   , AddDepRes (..)
   , toTask
   , adrVersion
@@ -82,15 +83,7 @@ type CombinedMap = Map PackageName PackageInfo
 
 -- | Type synonym representing values used during the construction of a build
 -- plan. The type is an instance of 'Monad', hence its name.
-type M =
-  WriterT
-    W
-    -- ^ The output to be collected
-    ( StateT
-        (Map PackageName (Either ConstructPlanException AddDepRes))
-        -- ^ Library map
-        (RIO Ctx)
-    )
+type M = WriterT W (StateT LibraryMap (RIO Ctx))
 
 -- | Type representing values used as the output to be collected during the
 -- construction of a build plan.
@@ -120,6 +113,11 @@ instance Semigroup W where
 instance Monoid W where
   mempty = memptydefault
   mappend = (<>)
+
+-- | A type synonym representing dictionaries of package names, and either an
+-- exception encountered during the construction of the build plan or the
+-- 'Stack.Build.ConstructPlan.addDep' result.
+type LibraryMap = Map PackageName (Either ConstructPlanException AddDepRes)
 
 -- | Type representing results of 'Stack.Build.ConstructPlan.addDep'.
 data AddDepRes

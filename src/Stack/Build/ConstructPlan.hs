@@ -46,7 +46,7 @@ import           Stack.Package
 import           Stack.Prelude hiding ( loadPackage )
 import           Stack.SourceMap ( getPLIVersion, mkProjectPackage )
 import           Stack.Types.Build.ConstructPlan
-                   ( AddDepRes (..), CombinedMap, Ctx (..), M
+                   ( AddDepRes (..), CombinedMap, Ctx (..), LibraryMap, M
                    , MissingPresentDeps (..), PackageInfo (..), ToolWarning(..)
                    , UnregisterState (..), W (..), adrHasLibrary, adrVersion
                    , isAdrToInstall, toTask
@@ -196,13 +196,17 @@ constructPlan
         targetPackageNames = Map.keys sourceMap.targets.targets
         -- Ignore the result of 'getCachedDepOrAddDep'.
         onTarget = void . getCachedDepOrAddDep
+        inner :: M ()
         inner = mapM_ onTarget targetPackageNames
-    (((), W efinals installExes dirtyReason warnings parents), m) <-
-      liftIO $ runRIO ctx (runStateT (runWriterT inner) Map.empty)
+        action :: RIO Ctx (((), W), LibraryMap)
+        action = runStateT (runWriterT inner) Map.empty
+    (((), output), libraryMap) <- liftIO $ runRIO ctx action
+    let W efinals installExes dirtyReason warnings parents = output
     -- Report any warnings
     mapM_ prettyWarn (warnings [])
     -- Separate out errors
-    let (errlibs, adrs) = partitionEithers $ map toEither $ Map.toList m
+    let (errlibs, adrs) =
+          partitionEithers $ map toEither $ Map.toList libraryMap
         (errfinals, finals) =
           partitionEithers $ map toEither $ Map.toList efinals
         errs = errlibs ++ errfinals
@@ -239,6 +243,13 @@ constructPlan
 
   hasBaseInDeps = Map.member (mkPackageName "base") sourceDeps
 
+  mkCtx ::
+       EnvConfig
+    -> Version
+    -> Map PackageName PackageSource
+    -> Maybe Curator
+    -> Text
+    -> Ctx
   mkCtx ctxEnvConfig globalCabalVersion sources curator pathEnvVar = Ctx
     { baseConfigOpts = baseConfigOpts0
     , loadPackage = \w x y z -> runRIO ctxEnvConfig $
@@ -494,19 +505,17 @@ addFinal lp package allInOne buildHaddocks = do
 -- | Given a 'PackageName', adds all of the build tasks to build the package, if
 -- needed. First checks if the package name is in the library map.
 --
--- 'constructPlan' invokes this on all the target packages, setting
--- @treatAsDep'@ to False, because those packages are direct build targets.
+-- 'constructPlan' invokes this on all the target packages.
+--
 -- 'addPackageDeps' invokes this while recursing into the dependencies of a
--- package. As such, it sets @treatAsDep'@ to True, forcing this package to be
--- marked as a dependency, even if it is directly wanted. This makes sense - if
--- we left out packages that are deps, it would break the --only-dependencies
--- build plan.
+-- package, even if it is directly wanted. This makes sense - if we left out
+-- packages that are deps, it would break the --only-dependencies build plan.
 getCachedDepOrAddDep ::
      PackageName
   -> M (Either ConstructPlanException AddDepRes)
 getCachedDepOrAddDep name = do
-  libMap <- get
-  case Map.lookup name libMap of
+  libraryMap <- get
+  case Map.lookup name libraryMap of
     Just res -> do
       logDebugPlanS "getCachedDepOrAddDep" $
            "Using cached result for "
