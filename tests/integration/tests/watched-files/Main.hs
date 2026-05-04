@@ -1,6 +1,8 @@
-import StackTest
-import Data.Foldable (for_)
-import Control.Monad (unless)
+-- | Stack recompiles when a file required for compilation is dirty.
+
+import           Control.Monad ( unless )
+import           Data.Foldable ( for_ )
+import           StackTest
 
 main :: IO ()
 main = for_ (words "foo bar baz bin") $ \x -> do

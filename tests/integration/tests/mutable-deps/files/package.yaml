@@ -4,10 +4,15 @@ name: myPackage
 
 dependencies:
 - base
-- bytestring
-- file-embed
+
+library:
+  source-dirs: src
+  dependencies:
+  - filemanip
 
 executables:
   myExe:
     source-dirs: app
     main: Main.hs
+    dependencies:
+    - myPackage

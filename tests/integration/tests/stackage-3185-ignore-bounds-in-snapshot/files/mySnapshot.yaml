@@ -1,0 +1,8 @@
+name: mySnapshot
+
+snapshot: ghc-9.10.3
+
+packages:
+# The Cabal file for async-2.1.1.1 specifies stm >= 2.2
+- async-2.1.1.1
+- stm-2.1.2.2

@@ -1,6 +1,8 @@
-import StackTest
-import System.Directory
-import Control.Exception (catch, IOException)
+-- | Stack's init command skips unreachable directories.
+
+import           Control.Exception ( IOException, catch)
+import           StackTest
+import           System.Directory
 
 main :: IO ()
 main = do

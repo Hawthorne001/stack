@@ -1,6 +1,6 @@
 module Main where
 
-import Files
+import Lib
 
 main = do
   cFiles <- allCFiles

@@ -1,5 +1,0 @@
-snapshot: ghc-9.10.3
-name: hackage-revisions-are-annoying
-packages:
-- async-2.1.1.1
-- stm-2.1.2.2

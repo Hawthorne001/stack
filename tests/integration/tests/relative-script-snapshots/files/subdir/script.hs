@@ -1,6 +1,7 @@
 #!/usr/bin/env stack
--- stack --snapshot snapshot.yaml script
-import Acme.Missiles
+-- stack --snapshot mySnapshot.yaml script
+
+import           Acme.Missiles ( launchMissiles )
 
 main :: IO ()
 main = launchMissiles
