@@ -1,0 +1,34 @@
+spec-version: 0.36.0
+
+name: myPackageA
+
+dependencies:
+- base
+
+library:
+  source-dirs: src
+  dependencies:
+  # Only builds if this package name comes before myPackageA, alphabetically!
+  - 0myPackageB
+
+executables:
+  myExeA:
+    source-dirs: app
+    main: Main.hs
+    dependencies:
+    - myPackageA
+
+tests:
+  test1:
+    source-dirs: test1
+    main: Main.hs
+    dependencies:
+    - myPackageA
+  test2:
+    source-dirs: test2
+    main: Main.hs
+    dependencies:
+    - myPackageA
+  test3:
+    source-dirs: test3
+    main: Main.hs

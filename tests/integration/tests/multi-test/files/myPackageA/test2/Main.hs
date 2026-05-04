@@ -1,4 +1,4 @@
-import Lib
+import LibA
 
 main :: IO ()
 main = pure ()

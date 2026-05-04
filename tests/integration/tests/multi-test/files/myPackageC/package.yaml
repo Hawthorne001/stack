@@ -1,0 +1,22 @@
+spec-version: 0.36.0
+
+name: myPackageC
+
+dependencies:
+- base
+
+executables:
+  myExeC:
+    source-dirs:
+    - app
+    - src
+    main: Main.hs
+
+tests:
+  test:
+    source-dirs:
+    - src
+    - test
+    main: Main.hs
+    dependencies:
+    - myPackageA
