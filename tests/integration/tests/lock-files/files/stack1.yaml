@@ -1,0 +1,5 @@
+snapshot: ghc-9.10.3
+
+extra-deps:
+- acme-missiles-0.3
+- acme-box-0.0.0.0
